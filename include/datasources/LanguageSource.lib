@@ -1,0 +1,240 @@
+<?php
+
+/*
+    LanguageSource.lib, DomCore, the WebAbility(r) Core System
+    Contains the language 3-level cache access object
+    (c) 2008-2011 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| LanguageSource : Language 3-level access object                  |
+|------------------------------------------------------------------|
+| - ::init : boolean                                               |
+| - ::messages : array(string => string)                           |
+| # originsource : DataSource extended object                      |
+| # fastobjectsource : FastObjectSource extended object            |
+| # loaded : boolean                                               |
+| # id : string                                                    |
+| # lang : string                                                  |
+| - tm1 : timestamp of originsource                                |
+| - tm2 : timestamp of fastobjectsource                            |
+|------------------------------------------------------------------|
+| + new LanguageSource($originsource: DataSource, $fastobjectsource: FastObjectSource) |
+| + setLanguage($id: string, $lang: string) : void                 |
+| + isValid() : boolean                                            |
+| + getTimestamp() : integer                                       |
+| + read() : mixed                                                 |
+| + getEntry($id: string) : string                                 |
+| + write($data: mixed) : void                                     |
+| + setEntry($id: string, $val: string) : void                     |
+| + delEntry($id: string) : void                                   |
+| + unlink() : void                                                |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+class LanguageSource extends DataSource implements Iterator
+{
+  private static $init = false;
+  private static $messages = array(
+    'LanguageSource.data' => 'The id and the language are missing to create the XML language file.'
+  );
+
+  protected $originsource = null;
+  protected $fastobjectsource = null;
+  protected $loaded = false;
+  protected $id = '';
+  protected $lang = '';
+
+  private $tm1;
+  private $tm2;
+
+  public function __construct($originsource, $fastobjectsource)
+  {
+    if (!self::$init)
+    {
+      // send messages to WAMessage
+      WAMessage::addMessages(self::$messages);
+      self::$init = true;
+    }
+
+    parent::__construct(null);
+
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/datasources/LanguageSource->__construct($originsource, $fastobjectsource)", WADebug::SYSTEM);
+    $this->originsource = $originsource;
+    $this->fastobjectsource = $fastobjectsource;
+  }
+
+  public function setLanguage($id, $lang)
+  {
+    if ($id)
+      $this->id = $id;
+    if ($lang)
+      $this->lang = $lang;
+  }
+
+  public function isValid()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug('include/datasources/LanguageSource->isValid()', WADebug::SYSTEM);
+
+    $this->tm1 = $this->originsource->getTimeStamp();
+    $this->tm2 = $this->fastobjectsource->getTimeStamp();
+    // true if anything has good time
+    return ($this->tm1 && $this->tm2 && $this->tm1 <= $this->tm2);
+  }
+
+  public function getTimeStamp()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug('include/datasources/LanguageSource->getTimeStamp()', WADebug::SYSTEM);
+    // the source one is the good one. We ignore the cache one
+    return $this->fastobjectsource->getTimeStamp();
+  }
+
+  // write all the new entries
+  public function write($data)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/datasources/LanguageSource->write($data)", WADebug::SYSTEM);
+
+    if (!$this->id || !$this->lang)
+      throw new DataSourceError(WAMessage::getMessage('LanguageSource.data'));
+
+    $this->fastobjectsource->write(array($data, $this->id, $this->lang));
+    $this->originsource->write(WALanguage::create($this->id, $this->lang, $data));
+    parent::write($data);
+    $this->loaded = true;
+  }
+
+  // ads or modify an entry
+  public function setEntry($id, $data)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/datasources/LanguageSource->setEntry($id, $data)", WADebug::SYSTEM);
+
+    $this->data[$id] = $data;
+    $this->write($this->data);
+  }
+
+  // delete an entry
+  public function delEntry($id)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/datasources/LanguageSource->delEntry($id)", WADebug::SYSTEM);
+
+    if (isset($this->data[$id]))
+    {
+      unset($this->data[$id]);
+      $this->write($this->data);
+    }
+  }
+
+  // get all the entries as an array
+  public function read()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug('include/datasources/LanguageSource->read()', WADebug::SYSTEM);
+
+    if ($this->isValid() && $this->loaded)
+      return $this->data;
+
+    // we sinchronize
+    // origin source is new, we recalculate all the chain
+    if ($this->tm1 > $this->tm2)
+    {
+      parent::write(WALanguage::compile($this->originsource->read()));
+      $this->id = WALanguage::$id;
+      $this->lang = WALanguage::$lang;
+      $this->fastobjectsource->write(array($this->data, $this->id, $this->lang));
+    }
+    elseif ($this->tm2 > $this->timestamp)
+    {
+      $data = $this->fastobjectsource->read();
+      parent::write($data[0]);
+      $this->id = $data[1];
+      $this->lang = $data[2];
+    }
+    $this->loaded = true;
+    return $this->data;
+  }
+
+  // get only 1 entry
+  public function getEntry($id)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/datasources/LanguageSource->getEntry($id)", WADebug::SYSTEM);
+    if (!$this->loaded)
+      $this->read();
+    if (isset($this->data[$id]))
+      return $this->data[$id];
+    return $id;
+  }
+
+  // destroy anything
+  public function unlink()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug('include/datasource/LanguageSource->unlink()', WADebug::SYSTEM);
+    $this->originsource->unlink();
+    $this->fastobjectsource->unlink();
+    parent::unlink();
+  }
+
+  // Iterator implemented
+  public function rewind()
+  {
+    if (!$this->loaded)
+      $this->read();
+    reset($this->data);
+  }
+
+  public function current()
+  {
+    if (!$this->loaded)
+      $this->read();
+    return current($this->data);
+  }
+
+  public function key()
+  {
+    if (!$this->loaded)
+      $this->read();
+    return key($this->data);
+  }
+
+  public function next()
+  {
+    if (!$this->loaded)
+      $this->read();
+    return next($this->data);
+  }
+
+  public function valid()
+  {
+    if (!$this->loaded)
+      $this->read();
+    return key($this->data) !== null;
+  }
+
+
+}
+
+?>

@@ -1,0 +1,45 @@
+<?php
+
+    // Separate doGet, doPost, doOptions, doTrace etc....
+    // (into servlet module)
+
+class ModuleServlet extends Module
+{
+  function __construct($name)
+  {
+    parent::__construct($name);
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ModuleServlet->__construct()", WADebug::SYSTEM);
+  }
+
+  public function start($protocol)
+  {
+
+    // Register hook to process requests
+    $protocol->registerHook('process', $this->name, "process");
+  }
+
+  public function process($request, $response)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ModuleServlet->process($request, $response)", WADebug::SYSTEM);
+
+    if ($response->content)
+      return;
+
+    $path = $request->getRequest('path');
+    if (substr($path, 0, 9) != '/servlet/')
+      return;
+
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ModuleServlet: request accepted", WADebug::SYSTEM);
+
+    $data = 'SERVLET OK';
+
+    $response->content = true;
+    $response->setBody($data);
+    $response->setHeader('Content-Length', $response->getBodyLength());
+  }
+}
+
+?>

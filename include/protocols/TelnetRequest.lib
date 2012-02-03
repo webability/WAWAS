@@ -1,0 +1,56 @@
+<?php
+
+/* @DESCR -- Do not edit
+
+WebAbility Base Version: >= 3
+Module: Common
+Language: >= PHP5 only
+Creation: 09/Mar/2006
+Copyright: Ing. Philippe Thomassigny (c) 2002-2006
+
+-
+
+@End_DESCR */
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| TelnetRequest : Contains all Telnet request data                     |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+class TelnetRequest extends WAClass implements Request
+{
+  public $protocol = null;
+  public $client = null;
+  public $shell = null;
+
+  private $data = '';
+
+  public function __construct()
+  {
+    parent::__construct();
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("TelnetRequest->__construct()", WADebug::SYSTEM);
+  }
+
+  public function clear()
+  {
+// Those 2 basic object are supposed to NOT change if the request is reused...
+//     $this->protocol = $this->client = null;
+    $this->data = '';
+  }
+
+  public function addData($data)
+  {
+    $this->data .= $data;
+  }
+
+  public function getData()
+  {
+    return $this->data;
+  }
+}
+
+?>

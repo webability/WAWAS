@@ -1,0 +1,51 @@
+<?php
+
+/*
+    __autoload.lib, WAWAS, the WebAbility(r) Web Application Server
+    Contains the auto class loader for PHP
+    (c) 2011, 2012 Philippe Thomassigny
+
+    This file is part of WAWAS
+
+    WAWAS is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    WAWAS is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+function __autoload($classname)
+{
+  $dirs = array(
+    './include/core/',
+    './include/datasources/',
+    './include/throwables/',
+    './include/server/',
+    './include/protocols/',
+    './include/modules/',
+    './include/interfaces/'
+  );
+
+  $found = false;
+  foreach($dirs as $d)
+  {
+    if (is_file($d.$classname.'.lib'))
+    {
+      include_once $d.$classname.'.lib';
+      $found = true;
+      break;
+    }
+  }
+
+  if (!$found)
+    throw new WAError("The common library <b>$classname</b> has not been found.");
+}
+
+?>

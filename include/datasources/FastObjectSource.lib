@@ -1,0 +1,142 @@
+<?php
+
+/*
+    FastObjectSource.lib, DomCore, the WebAbility(r) Core System
+    Contains the Fast Object 2-level access
+    (c) 2008-2011 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| FastObjectSource : Fast Object 2-level access object             |
+|------------------------------------------------------------------|
+| # datasource : DataSource extended object                        |
+| # shmsource : SHMSource object                                   |
+| # loaded : boolean                                               |
+| - tm1 : timestamp of datasource                                  |
+| - tm2 : timestamp of shmsource                                   |
+|------------------------------------------------------------------|
+| + new FastObjectSource($datasource: DataSource, $shmsource: SHMSource) |
+| + isValid() : boolean                                            |
+| + getTimestamp() : float                                         |
+| + read() : mixed                                                 |
+| + write($data: mixed) : void                                     |
+| + unlink() : void                                                |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+// A Fast Object is ALWAYS serialized into the datasource
+
+class FastObjectSource extends DataSource
+{
+  protected $datasource = null;
+  protected $shmsource = null;
+  protected $loaded = false;
+
+  private $tm1;
+  private $tm2;
+
+  public function __construct($datasource, $shmsource = null)
+  {
+    parent::__construct(null);
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/datasources/FastObjectSource->__construct($datasource, $shmsource)", WADebug::SYSTEM);
+
+    $this->datasource = $datasource;
+    $this->shmsource = $shmsource;
+  }
+
+  public function isValid()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug('include/datasources/FastObjectSource->isValid()', WADebug::SYSTEM);
+
+    $this->tm1 = $this->datasource->getTimeStamp();
+    $this->tm2 = ($this->shmsource?$this->shmsource->getTimeStamp():$this->tm1);
+
+    // true if the afo in shared memory is OK
+    // local cache does NOT change validity
+    return ($this->tm1 && $this->tm2 && $this->tm1 <= $this->tm2);
+  }
+
+  public function getTimeStamp()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/datasources/FastObjectSource->getTimeStamp()", WADebug::SYSTEM);
+    if ($this->shmsource)
+      return $this->shmsource->getTimeStamp();
+    return $this->datasource->getTimeStamp();
+  }
+
+  public function write($data)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/datasources/FastObjectSource->write($data)", WADebug::SYSTEM);
+
+    $this->datasource->write(serialize($data));
+    if($this->shmsource)
+      $this->shmsource->write($data);
+    $this->data = $data;
+    $this->loaded = true;
+  }
+
+  public function read()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug('include/datasources/FastObjectSource->read()', WADebug::SYSTEM);
+
+    if ($this->isValid() && $this->loaded)
+      return $this->data;
+
+    // we sinchronize
+    // origin source is new, we recalculate all the chain
+    if ($this->tm1 > $this->tm2)
+    {
+      parent::write($this->datasource->read());
+      if ($this->data)
+        $this->data = unserialize($this->data);
+      // shared memory EXISTS or tm2 cannot be != tm1
+      $this->shmsource->write($this->data);
+    }
+    elseif ($this->shmsource)
+    {
+      parent::write($this->shmsource->read());
+      $this->loaded = true;
+    }
+    else
+    {
+      parent::write($this->datasource->read());
+      if ($this->data)
+        $this->data = unserialize($this->data);
+    }
+    return $this->data;
+  }
+
+  public function unlink()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug('include/datasource/FastObjectSource->unlink()', WADebug::SYSTEM);
+    $this->datasource->unlink();
+    if ($this->shmsource)
+      $this->shmsource->unlink();
+    parent::unlink();
+  }
+}
+
+?>

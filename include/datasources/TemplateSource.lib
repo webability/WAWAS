@@ -1,0 +1,117 @@
+<?php
+
+/*
+    TemplateSource.lib, DomCore, the WebAbility(r) Core System
+    Contains the Template 4-levels cache access object
+    (c) 2008-2011 Philippe Thomassigny
+
+    This file is part of WebAbility
+
+*/
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| TemplateSource : Template 4-levels access object                 |
+|------------------------------------------------------------------|
+| # originsource : DataSource extended object                      |
+| # fastobjectsource : FastObjectSource extended object            |
+| # loaded : boolean                                               |
+| - tm1 : timestamp of originsource                                |
+| - tm2 : timestamp of fastobjectsource                            |
+|------------------------------------------------------------------|
+| + new TemplateSource($originsource: DataSource, $fastobjectsource: FastObjectSource) |
+| + isValid() : boolean                                            |
+| + getTimestamp() : integer                                       |
+| + read() : mixed                                                 |
+| + write($data: mixed) : void                                     |
+| + unlink() : void                                                |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+class TemplateSource extends DataSource
+{
+  protected $originsource = null;
+  protected $fastobjectsource = null;
+  protected $loaded = false;
+
+  private $tm1;
+  private $tm2;
+
+  public function __construct($originsource, $fastobjectsource)
+  {
+    parent::__construct(null);
+
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/datasources/TemplateSource->__construct($originsource, $fastobjectsource)", WADebug::SYSTEM);
+    $this->originsource = $originsource;
+    $this->fastobjectsource = $fastobjectsource;
+  }
+
+  public function isValid()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug('include/datasources/TemplateSource->isValid()', WADebug::SYSTEM);
+
+    $this->tm1 = $this->originsource->getTimeStamp();
+    $this->tm2 = $this->fastobjectsource->getTimeStamp();
+
+    // true if the afo in shared memory is OK
+    return ($this->tm1 && $this->tm2 && $this->tm1 <= $this->tm2);
+  }
+
+  public function getTimeStamp()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/datasources/TemplateSource->getTimeStamp()", WADebug::SYSTEM);
+    return $this->fastobjectsource->getTimeStamp();
+  }
+
+  public function write($data)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/datasources/TemplateSource->write($data)", WADebug::SYSTEM);
+
+    $this->fastobjectsource->write($data);
+    $this->originsource->write($data);
+    parent::write(new WATemplate($data));
+    $this->loaded = true;
+  }
+
+  public function read()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug('include/datasources/TemplateSource->read()', WADebug::SYSTEM);
+
+    if ($this->isValid() && $this->loaded)
+      return $this->data;
+
+    // we sinchronize
+    // origin source is new, we recalculate all the chain
+    if ($this->tm1 > $this->tm2)
+    {
+      parent::write(new WATemplate($this->originsource->read()));
+      $this->fastobjectsource->write($this->data);
+    }
+    elseif ($this->tm2 > $this->timestamp)
+    {
+      parent::write($this->fastobjectsource->read());
+    }
+    $this->loaded = true;
+    return $this->data;
+  }
+
+  // destroy anything
+  public function unlink()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug('include/datasource/TemplateSource->unlink()', WADebug::SYSTEM);
+    $this->originsource->unlink();
+    $this->fastobjectsource->unlink();
+    parent::unlink();
+  }
+
+}
+
+
+?>

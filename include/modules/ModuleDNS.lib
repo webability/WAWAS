@@ -1,0 +1,21 @@
+<?php
+
+class ModuleDNS extends Module
+{
+  function __construct($name)
+  {
+    parent::__construct($name);
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ModuleDNS->__construct()", WADebug::SYSTEM);
+  }
+
+  public function start($protocol)
+  {
+    // Register hook to process requests
+    // $protocol->registerHook('process', $this->name, "process");
+  }
+
+}
+
+
+?>

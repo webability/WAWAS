@@ -1,0 +1,104 @@
+<?php
+
+class ModuleStatic extends Module
+{
+  private $mimes = array();
+
+  private $def = array(
+    'mimes' => array(
+        'file' => array('type' => 'file', 'mandatory' => false, 'default' => 'conf/mime.types') )
+     );
+
+  function __construct($name)
+  {
+    parent::__construct($name);
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ModuleStatic->__construct()", WADebug::SYSTEM);
+
+    $this->base->config->addDef('', $this->def);
+  }
+
+  public function start($protocol)
+  {
+    // load mimes
+    $mimefile = $this->base->config->getEntry('mimes/file');
+    if (!is_file($mimefile))
+      throw new WAWASError("Error, the mime file does not exist: ".$mimefile);
+    $mimes = file($mimefile);
+    foreach ($mimes as $mime)
+    {
+      if (!trim($mime))
+        continue;
+      if (substr(trim($mime), 0, 1) == '#')
+        continue;
+      $type = strtok($mime, " \t");
+      $ext = strtok('');
+      if (!$type || !$ext)
+        continue;
+      $xext = explode(' ', $ext);
+      foreach($xext as $e)
+      {
+        $this->mimes[trim($e)] = trim($type);
+      }
+    }
+
+    // Register hook to process requests
+    $protocol->registerHook('process', $this->name, "process");
+  }
+
+  // We do not need [header] method to notify about body since we do not need body.
+
+  // we should passthrough files without memory cache ? any send hook function ?
+  public function process($request, $response)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ModuleStatic->process($request, $response)", WADebug::SYSTEM);
+
+    if ($response->content)
+      return;
+    $name = $this->getName($request->vhost, $request->getRequest('path'));
+    // NO file found, maybe another module will know what to do
+    if (!$name)
+      return;
+
+    $f = fopen($name, "rb");
+    $response->setBody(fread($f, filesize($name)));
+    fclose($f);
+
+    // Notify protocol: There is info !
+    $response->content = true;
+    // take the date of the file
+    $response->setHeader('Date', date ("r", filemtime($name)));
+    $response->setHeader('Content-Length', $response->getBodyLength());
+
+    $ext = $request->getRequest('ext');
+
+    // Set the mime based on the ext
+    if (isset($this->mimes[$ext]))
+      $response->setHeader('Content-Type', $this->mimes[$ext]);
+    else
+      $response->setHeader('Content-Type', 'application/octet-stream');
+  }
+
+  private function getName($OV, $path)
+  {
+// SECURITY VERIFY    the file is NOT outside the root dir !!!! and is available and is authorized !!!
+// Any parameter to auth or not the .. into the path ?
+
+    $basedir = $OV->getdocumentroot();
+    $hasslash = false;
+    if (substr($basedir, -1) == '/')
+      $hasslash = true;
+    if (substr($path, 0, 1) == '/')
+      $hasslash = true;
+    $name = $basedir . ($hasslash?'':'/') . $path;
+    if (is_dir($name))
+      return false;
+    if (!is_file($name))
+      return false;
+    return $name;
+  }
+
+}
+
+?>

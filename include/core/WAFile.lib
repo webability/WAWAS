@@ -1,0 +1,169 @@
+<?php
+
+/*
+    WAFile.lib, DomCore, the WebAbility(r) Core System
+    Contains the basic class to manipulate files and directories
+    (c) 2008-2010 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box
+|----------------------------------------------------------------------------|
+| WAFile: Files and Directories manipulations                                |
+|----------------------------------------------------------------------------|
+| - ::dirmask: octal                                                         |
+| - ::filemask: octal                                                        |
+|----------------------------------------------------------------------------|
+| + ::setDirMask($dirmask: octal)                                            |
+| + ::getDirMask(): octal                                                    |
+| + ::setFileMask($dirmask: octal)                                           |
+| + ::getFileMask(): octal                                                   |
+| + ::createDirectory($dir: string, $subpath: string [, $mask: octal])       |
+| + ::copyFile($origin: string, $destination: string)                        |
+| + ::copyStructure($origin: string, $destination: string)                   |
+| + ::deleteAll($dir: string, $reConstraint: regexp)                         |
+|----------------------------------------------------------------------------|
+@End_UML_Box */
+
+class WAFile
+{
+  private static $dirmask = 0700;
+  private static $filemask = 0600;
+
+  static public function setDirMask($dirmask)
+  {
+    self::$dirmask = $dirmask;
+  }
+
+  static public function getDirMask()
+  {
+    return self::$dirmask;
+  }
+
+  static public function setFileMask($filemask)
+  {
+    self::$filemask = $filemask;
+  }
+
+  static public function getFileMask()
+  {
+    return self::$filemask;
+  }
+
+  static public function createDirectory($dir, $subpath, $mask = null)
+  {
+    // check each sub-component of subpath
+    if (!$dir) $dir = '';
+    if (!empty($dir) && substr($dir, -1) != '/') $dir .= '/';
+
+    $dirs = explode('/', $subpath);
+    if (substr($dir.$subpath, 0, 1) != '/')
+    {
+      if (WADebug::getOSType() != WADebug::WINDOWS)
+        $prepend = str_replace('\\', '/', getcwd()).'/';
+      else
+        $prepend = '';
+    }
+    else
+      $prepend = '';
+    $p = '';
+    for($i = 0; $i < count($dirs); $i++)
+    {
+      clearstatcache();
+      $p .= ($i?'/':'').$dirs[$i];
+      if ($dir.$p == '')
+        continue;
+      if(!file_exists($prepend.$dir.$p))
+      {
+        if (!@mkdir($prepend.$dir.$p, $mask?$mask:self::$dirmask))
+          throw new FileException(WAMessage::getMessage('WAFile.mkdirproblem').$prepend.$dir.$p);
+      }
+    }
+    clearstatcache();
+  }
+
+  // ======================================================
+  // Copy the file from the generic site to the good site
+  // the file can either be a true file or a directory
+  static public function copyFile($origin, $destination)
+  {
+    if (is_dir($origin))
+    {
+      WAFile::createDirectory('', $destination);
+      WAFile::copyStructure($origin, $destination);
+    }
+    elseif (is_file($origin))
+      copy($origin, $destination) && chmod($destination, self::$filemask);
+    else
+      throw new FileException(WAMessage::getMessage('WAFile.unknownfile').$origin);
+  }
+
+  // ======================================================
+  // Copy the structure (dir/files) from the generic site to the good site
+  static public function copyStructure($origin, $destination)
+  {
+    if (!is_dir($destination))
+      mkdir($destination, self::$dirmask);
+    $dir = opendir($origin);
+    while($file = readdir($dir))
+    {
+      if($file == '.' || $file == '..')
+        continue;
+      WAFile::copyFile($origin.'/'.$file, $destination.'/'.$file);
+    }
+    closedir($dir);
+  }
+
+  // ======================================================
+  // recursively deletes a directory
+  static public function deleteALL($dir, $reConstraint)
+  {
+    // $dir should not be too tiny string, are we deleting something from the system ?
+    // this is a hard security for if your $dir assignation gets any error or so, to not delete wrong stuff
+    if (strlen($dir) < 10)
+      throw new FileException(WAMessage::getMessage('WAFile.baddir').$dir);
+    // $reConstraint is a regular expression applied on the directory to delete,
+    // may contain a sub part, or a specific mask to be sure we are deleting what we pretend to delete
+    if (!preg_match($reConstraint, $dir))
+      throw new FileException(WAMessage::getMessage('WAFile.baddir').$dir);
+
+    if(is_file($dir))
+      unlink($dir);
+    elseif (is_dir($dir))
+    {
+      $dd = opendir($dir);
+      while($file = readdir($dd))
+      {
+        if($file == '.' || $file == '..')
+          continue;
+        if (is_dir($dir.'/'.$file))
+        {
+          WAFile::deleteAll($dir.'/'.$file, $reConstraint);
+          rmdir($dir.'/'.$file);
+        }
+        elseif (is_file($dir.'/'.$file))
+          unlink($dir.'/'.$file);
+      }
+      closedir($dd);
+      rmdir($dir);
+    }
+    return true;
+  }
+
+}
+
+?>

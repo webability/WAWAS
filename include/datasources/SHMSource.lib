@@ -1,0 +1,78 @@
+<?php
+
+/*
+    SHMSource.lib, DomCore, the WebAbility(r) Core System
+    Contains the shared memory access object
+    (c) 2008-2011 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| SHMSource : Shared memory access                                 |
+|------------------------------------------------------------------|
+| # SHM : WASHM instance                                           |
+|------------------------------------------------------------------|
+| + new SHMSource($id: varchar, $SHM: WASHM instance)              |
+| + isValid() : boolean                                            |
+| + getTimestamp() : integer                                       |
+| + read() : mixed                                                 |
+| + write($data: mixed) : void                                     |
+| + unlink() : void                                                |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+class SHMSource extends DataSource
+{
+  protected $SHM;
+
+  public function __construct($id, $SHM)
+  {
+    parent::__construct($id);
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("common/SHMSource->__construct($id)", WADebug::SYSTEM);
+    $this->SHM = $SHM;
+  }
+
+  public function isValid()
+  {
+    return $this->SHM->__isset($this->data);
+  }
+
+  public function getTimeStamp()
+  {
+    return $this->SHM->lastwrite($this->data);
+  }
+
+  public function read()
+  {
+    return $this->SHM->read($this->data);
+  }
+
+  public function write($data)
+  {
+    $this->SHM->write($this->data, $data);
+  }
+
+  public function unlink()
+  {
+    $this->SHM->delete($this->data);
+  }
+}
+
+?>

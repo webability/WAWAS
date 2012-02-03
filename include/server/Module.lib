@@ -1,0 +1,42 @@
+<?php
+
+/*
+  Possible Hooks for any modules:
+
+  init    Happens before main server infinite loop. Usefull to init logs, admin components
+  loop    Happens on every main server loop. (approx 1000 times per second on normal use). Usefull for stats logs and admin components
+
+  receivedata   Happens when the client receive any data no matter what it is, no matter the protocol
+
+  header        Happens when the Protocol have found a fully well formed header/request. Any protocol should implement this hook
+  loading       Happens when we receive a PART of the body/request, but it is not complete yet. Any protocol should implement this hook to notify a % of loading
+  process       Happens when the Protocol need the calculation of the response based on the request,
+                once 100% of the request has been received. Any protocol should implement this hook.
+                When a module have calculated a response, other modules *should not* calculate a response.
+*/
+
+
+class Module extends WAObject
+{
+  protected $name;
+  private static $hooks = array( );
+
+  public function __construct($name)
+  {
+    parent::__construct();
+    $this->name = $name;
+  }
+
+  public function start($protocol)
+  {
+    // $protocol->registerHook($protocol, type, $module, $function)
+  }
+
+  public function process($request, $response)
+  {
+
+  }
+
+}
+
+?>

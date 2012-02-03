@@ -1,0 +1,64 @@
+<?php
+
+/*
+Protocol is a TUBE: it does not retain any information, JUST process it
+It will create HTTPRequest and HTTPResponse if needed on new request
+*/
+
+final class ProtocolTelnet extends Protocol
+{
+  private $protocolmatch = '/^./i';
+
+  public function __construct()
+  {
+    parent::__construct();
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ProtocolTelnet->__construct()", WADebug::SYSTEM);
+  }
+
+  public function start()
+  {
+    parent::start();
+  }
+
+  public function createRequest($client)
+  {
+    $r = new TelnetRequest();
+    $r->protocol = $this;
+    $r->client = $client;
+    return $r;
+  }
+
+  public function createResponse()
+  {
+    return new TelnetResponse();
+  }
+
+  public function check($buffer)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ProtocolTelnet->check($buffer)", WADebug::SYSTEM);
+
+    return preg_match($this->protocolmatch, $buffer);
+  }
+
+  public function beforeprocess($client)
+  {
+    // Should we always fork ? any special rule ? who decides ? module ? process ?
+    return $client->fork();
+  }
+
+  public function process($data, $request, $response)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ProtocolTelnet->process($data)", WADebug::SYSTEM);
+
+    $request->addData($data);
+    $this->callHooks('process', array($request, $response));
+
+    $request->client->senddata($response->getData());
+  }
+
+}
+
+?>

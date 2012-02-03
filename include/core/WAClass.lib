@@ -1,0 +1,80 @@
+<?php
+
+/*
+    WAClass.lib, DomCore, the WebAbility(r) Core System
+    Contains the basic object to give seriability to all classes
+    (c) 2008-2010 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box
+|------------------------------------------------------------------|
+| WAClass : DomCore Basic class                                    |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+| + new WAClass()                                                  |
+| # serial(&data): void                                            |
+| + serialize(): string                                            |
+| # unserial(data): void                                           |
+| + unserialize($ser: string)                                      |
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+
+class WAClass extends WAObject implements Serializable
+{
+  public function __construct()
+  {
+    parent::__construct();
+  }
+
+  // This method must be overloaded by the extended class to push stuff into it
+  // $data is an array by default
+  protected function serial(&$data)
+  {
+    throw new CoreError(WAMessage::getMessage('WAClass.serial'));
+  }
+
+  // Do a normal serialize unless the method is overloaded
+  // Do not serialize WADebug vars
+  public function serialize()
+  {
+    // default serialized object is EMPTY.
+    $data = array();
+    $this->serial($data);
+    return serialize($data);
+  }
+
+  // This method must be overloaded by the extended class to read stuff into it
+  // $data is the same data as for serializing
+  protected function unserial($data)
+  {
+    throw new CoreError(WAMessage::getMessage('WAClass.unserial'));
+  }
+
+  // Do a normal unserialize unless the method is overloaded
+  public function unserialize($serialized)
+  {
+    parent::__construct(); // call the constructor of basic DomCore for it the DEBUG is set
+    $data = unserialize($serialized);
+    $this->unserial($data);
+    return true;
+  }
+
+}
+
+?>

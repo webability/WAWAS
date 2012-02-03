@@ -1,0 +1,28 @@
+<?php
+
+class index extends WAObject
+{
+  private $admin;
+  private $request;
+  private $response;
+
+  public function __construct($admin)
+  {
+    parent::__construct();
+
+    $this->admin = $admin;
+  }
+
+  public function main($request, $response)
+  {
+    $this->request = $request;
+    $this->response = $response;
+
+    $template = new WATemplate(file_get_contents('admin/index.template'));
+
+    return $template->resolve();
+  }
+
+}
+
+?>

@@ -1,0 +1,42 @@
+<?php
+
+final class Logger extends WAObject
+{
+  private $filepointer = null;
+
+  public function __construct($file)
+  {
+    parent::__construct();
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("Logger->__construct($file)", WADebug::SYSTEM);
+
+    if (!file_exists($file))
+    {
+      // we create an empty file
+      $fp = fopen($file, "wb");
+      if ($fp === false)
+        throw new WAWASError("Error during creation of log file: $file");
+      fclose($fp);
+    }
+    $this->filepointer = fopen($file, "ab");
+    fwrite($this->filepointer, "\n\n".date("Y-m-d H:i:s", time())." - LOG started\n");
+  }
+
+  public function __destruct()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("Logger->__destruct()", WADebug::SYSTEM);
+
+    fwrite($this->filepointer, date("Y-m-d H:i:s", time())." - Closing LOG\n");
+    fclose($this->filepointer);
+    $this->filepointer = null;
+  }
+
+  public function insertLog($level, $text)
+  {
+    fwrite($this->filepointer, date("Y-m-d H:i:s", time())." - $level - $text\n");
+  }
+
+}
+
+?>

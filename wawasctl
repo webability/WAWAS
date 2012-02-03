@@ -1,0 +1,74 @@
+#!/bin/bash
+#
+RETVAL=0
+HERE=`pwd`
+# WACS="/usr/bin/php5 $HERE/wacs.php -d -m --debug"
+WACS="/usr/bin/php $HERE/wacs.php --debug"
+WACSNAME="WACS v1.0"
+PIDFILE="$HERE/wacs.lock"
+LOGFILE="$HERE/logs/wacs.log"
+
+isrunning()
+{
+  if [ -f "$PIDFILE" ]; then
+    return 0;
+  else
+    return 1;
+  fi
+}
+
+start()
+{
+  if isrunning; then
+    echo "$WACSNAME is already running"
+    return 1;
+  else
+    echo
+    echo -n $"Starting $WACSNAME: "
+    $WACS >>$LOGFILE
+    RETVAL=$?
+    echo
+    return $RETVAL
+  fi
+}
+
+stop()
+{
+  if isrunning; then
+    echo
+    echo -n $"Stopping $WACSNAME: "
+    kill `cat $PIDFILE` >/dev/null 2>/dev/null
+    sleep 1
+    rm -f $PIDFILE
+    echo
+    return $RETVAL
+  else
+    echo "$WACSNAME is not running"
+  fi
+}
+
+restart() {
+  stop
+  start
+}
+
+# See how we were called.
+case "$1" in
+  start)
+    start
+    ;;
+  stop)
+    stop
+    ;;
+  restart)
+    restart
+    ;;
+  configtest)
+    configtest
+    ;;
+  *)
+    echo $"Usage: $0 {start|stop|restart|configtest}"
+    exit 1
+esac
+
+exit $?

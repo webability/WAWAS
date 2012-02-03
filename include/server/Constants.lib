@@ -1,0 +1,24 @@
+<?php
+
+final class Constants
+{
+  const SP = " ";
+  const SL = "/";
+  const CR = "\r";
+  const LF = "\n";
+  const HT = "\t";
+  const CRLF = "\r\n";
+  const QuerySeparator = '?';
+  const VarSeparator = '&';
+  const ValueSeparator = '=';
+
+  const DEFAULTBUFFERLENGTH = 8196;
+  const DEFAULTIP = "127.0.0.1";
+  const DEFAULTPORT = "80";
+  const DEFAULTMAXCONNECTIONS = "100";
+  const DEFAULTTIMEOUT = "120";
+  const DEFAULTLISTENQUEUE = "20";
+
+}
+
+?>

@@ -1,0 +1,299 @@
+<?php
+
+/*
+    WASHM.lib, DomCore, the WebAbility(r) Core System
+    Contains the shared memory manager class to access resident memory variables
+    (c) 2008-2011 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| SHM : Shared Memory static object                                |
+|------------------------------------------------------------------|
+| - ::init : boolean                                               |
+| - ::messages : array(string => string)                           |
+| - size : integer                                                 |
+| - memid : integer                                                |
+| - shm : resource                                                 |
+|------------------------------------------------------------------|
+| + new WASHM($size: integer, $memid: integer)                     |
+| - start() : void                                                 |
+| - attach() : resource                                            |
+| - detach() : void                                                |
+| - getlink($id: string, $type: enum(null, 'r', 'w', 'd')) : array('p': integer, 'r': timestamp, 'w': timestamp) |
+| - writelink($id: string, $pointer: integer) : void               |
+| - getnextpointer() : integer                                     |
+| + write($id: string, $val: mixed) : void                         |
+| + read($id: string) : void                                       |
+| + delete($id: string) : void                                     |
+| + lastread($id: string) : timestamp                              |
+| + lastwrite($id: string) : timestamp                             |
+| + __get($id: string) : mixed                                     |
+| + __set($id: string, $data: mixed) : void                        |
+| + __isset($id: string) : boolean                                 |
+| + __unset($id: string) : void                                    |
+| + flush() : void                                                 |
+| + content() : array($name:string => $id: string)                 |
+| + size() : array( 'total' => integer, 'used' => integer, 'free' => integer) |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+class WASHM extends WADebug
+{
+  private static $init = false;
+  private static $messages = array(
+    'WASHM.nosharedmemory' => 'There is no available shared memory',
+    'WASHM.noattach' => 'We could not attach to our shared memory'
+  );
+
+  private $size = 20971520; // 20 MB by default (1024*1024*20)
+  private $memid = 10010;   // our version by default, arbitrary value
+  private $shm = null;      // our shared memory segment resource pointer
+
+  public function __construct($size = null, $memid = null)
+  {
+    if (!self::$init)
+    {
+      // send messages to WAMessage
+      WAMessage::addMessages(self::$messages);
+      self::$init = true;
+    }
+
+    parent::__construct();
+
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/core/WASHM->__construct( $size, $memid )", WADebug::SYSTEM);
+
+    if (!function_exists('sem_get'))
+      throw new SHMError(WAMessage::getMessage('WASHM.nosharedmemory'));
+
+    if ($size)
+      $this->size = $size;
+    if ($memid)
+      $this->memid = $memid;
+    $this->start();
+  }
+
+  private function attach()
+  {
+    $this->shm = shm_attach($this->memid, $this->size);
+    if (!$this->shm)
+      throw new SHMError(WAMessage::getMessage('WASHM.noattach'));
+  }
+
+  private function detach()
+  {
+    shm_detach($this->shm);
+    $this->shm = null;
+  }
+
+  private function start()
+  {
+    // check if we have availability of shared memory
+    $this->attach();
+    if (!shm_has_var($this->shm, 0))
+    {
+      shm_put_var($this->shm, 0, array());
+      shm_put_var($this->shm, 1, 2);
+    }
+    $this->detach();
+  }
+
+  private function getlink($id, $type)
+  {
+    $links = shm_get_var($this->shm, 0);
+    if (isset($links[$id]))
+    {
+      $link = $links[$id];
+      if ($type == 'r') $links[$id]['r'] = microtime(true);
+      if ($type == 'w') $links[$id]['w'] = microtime(true);
+      if ($type == 'd') unset($links[$id]);
+      if ($type)
+        shm_put_var($this->shm, 0, $links);
+      return $link;
+    }
+    return null;
+  }
+
+  private function writelink($id, $pointer)
+  {
+    $link = array('p' => $pointer, 'r' => null, 'w' => microtime(true));
+    $links = shm_get_var($this->shm, 0);
+    $links[$id] = $link;
+    shm_put_var($this->shm, 0, $links);
+  }
+
+  private function getnextpointer()
+  {
+    $pt = shm_get_var($this->shm, 1);
+    shm_put_var($this->shm, 1, $pt+1);
+    return $pt;
+  }
+
+  // write an object into shm
+  public function write($id, $data)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/core/WASHM->write( $id, $data )", WADebug::SYSTEM);
+
+    $this->attach();
+    $link = $this->getlink($id, 'w');
+    if ($link)
+    {
+      shm_put_var($this->shm, $link['p'], $data);
+    }
+    else
+    {
+      $pointer = $this->getnextpointer();
+      shm_put_var($this->shm, $pointer, $data);
+      $this->writelink($id, $pointer);
+    }
+    $this->detach();
+  }
+
+  // read an object from shm
+  public function read($id)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/core/WASHM->read( $id )", WADebug::SYSTEM);
+
+    $this->attach();
+    $var = null;
+    $link = $this->getlink($id, 'r');
+    if ($link)
+      $var = shm_get_var($this->shm, $link['p']);
+    $this->detach();
+    return $var;
+  }
+
+  // delete an object from shm
+  public function delete($id)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/core/WASHM->delete( $id )", WADebug::SYSTEM);
+
+    $this->attach();
+    $link = $this->getlink($id, 'd');
+    if ($link)
+      $var = shm_remove_var($this->shm, $link['p']);
+    $this->detach();
+  }
+
+  public function lastread($id)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/core/WASHM->lastread( $id )", WADebug::SYSTEM);
+
+    $this->attach();
+    $link = $this->getlink($id, null);
+    $this->detach();
+    if ($link)
+      return $link['r'];
+    return null;
+  }
+
+  public function lastwrite($id)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/core/WASHM->lastwrite( $id )", WADebug::SYSTEM);
+
+    $this->attach();
+    $link = $this->getlink($id, null);
+    $this->detach();
+    if ($link)
+      return $link['w'];
+    return null;
+  }
+
+  public function __get($id)
+  {
+    return $this->read($id);
+  }
+
+  public function __set($id, $data)
+  {
+    $this->write($id, $data);
+  }
+
+  public function __isset($id)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/core/WASHM->__isset( $name )", WADebug::SYSTEM);
+
+    $this->attach();
+    $link = $this->getlink($id, null);
+    $this->detach();
+    return !!$link;
+  }
+
+  public function __unset($id)
+  {
+    $this->delete($id);
+  }
+
+  // clear all the memory
+  public function flush()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug('include/core/WASHM->flush()', WADebug::SYSTEM);
+
+    $this->attach();
+    shm_remove($this->shm);
+    $this->detach();
+    //restart with same values
+    $this->start();
+  }
+
+  // get all the id of sm objects
+  public function content()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug('include/core/WASHM->content()', WADebug::SYSTEM);
+
+    $this->attach();
+    $links = shm_get_var($this->shm, 0);
+    $this->detach();
+    return $links;
+  }
+
+  // return totalmem, usedmem, freemem
+  public function size()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug('include/core/WASHM->size()', WADebug::SYSTEM);
+
+    $this->attach();
+    // header size
+    $size = (PHP_INT_SIZE * 4) + 8;
+    $links = shm_get_var($this->shm, 0);
+    $size += (((strlen(serialize($links))+ (4 * PHP_INT_SIZE)) /4 ) * 4 ) + 4;
+    $pointer = shm_get_var($this->shm, 1);
+    $size += (((strlen(serialize($pointer))+ (4 * PHP_INT_SIZE)) /4 ) * 4 ) + 4;
+    foreach($links as $link)
+    {
+      $var = shm_get_var($this->shm, $link['p']);
+      $size += (((strlen(serialize($var))+ (4 * PHP_INT_SIZE)) /4 ) * 4 ) + 4;
+    }
+    $this->detach();
+    return array('total' => $this->size, 'used' => $size, 'free' => $this->size - $size);
+  }
+
+}
+
+?>

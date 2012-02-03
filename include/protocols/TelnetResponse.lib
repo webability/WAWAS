@@ -1,0 +1,54 @@
+<?php
+
+/* @DESCR -- Do not edit
+
+WebAbility Base Version: >= 3
+Module: Common
+Language: >= PHP5 only
+Creation: 09/Mar/2006
+Copyright: Ing. Philippe Thomassigny (c) 2002-2006
+
+-
+
+@End_DESCR */
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| TelnetResponse : Contains all Telnet response data                   |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+class TelnetResponse extends WAClass implements Response
+{
+  public $content = false;
+
+  private $data = '';
+
+  public function __construct()
+  {
+    parent::__construct();
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("TelnetResponse->__construct()", WADebug::SYSTEM);
+  }
+
+  public function clear()
+  {
+    $this->content = false;
+    $this->data = '';
+  }
+
+  public function addData($data)
+  {
+    $this->data .= $data;
+  }
+
+  public function getData()
+  {
+    return $this->data;
+  }
+
+}
+
+?>

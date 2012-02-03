@@ -1,0 +1,303 @@
+<?php
+
+class Client extends WAObject
+{
+  private $listener = null;          // the listener who called us (with local connection IP and port)
+  private $socket = null;            // our exclusive socket
+  private $clientIP = null;          // the IP of the client
+  private $clientPort = null;        // the port of the client
+
+  public $started = null;            // timestamp of listener started
+  public $closed = null;             // timestamp of listener closed
+
+  private $tempbuffer = '';          // input buffer of data, temporary
+  private $protocol = null;          // the protocol to use when found
+
+  private $request = null;           // the request from the client
+  private $response = null;          // the response to send to the client when built
+
+  public $datapending = false;
+  public $dataclose = false;
+  private $datastack = array();
+
+  private $forked = false;           // set to true when it's a forked client for any local task, will die when the clients disconnect
+
+  function __construct($listener, $socket, $clientIP, $clientPort)
+  {
+    parent::__construct();
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("Client->__construct($listener, $socket, $clientIP, $clientPort)", WADebug::SYSTEM);
+
+    $this->started = time();
+
+    $this->listener = $listener;
+    $this->socket = $socket;
+    $this->clientIP = $clientIP;
+    $this->clientPort = $clientPort;
+
+    // non blocking reader
+    socket_set_nonblock($socket);
+    // remove blocking when forced shutdown
+    $arrOpt = array('l_onoff' => 1, 'l_linger' => 1); // tiny timeout on close
+    socket_set_option($socket, SOL_SOCKET, SO_LINGER, $arrOpt);
+  }
+
+  public function __destruct()
+  {
+    $this->closeClient();
+  }
+
+  public function closeClient()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("Client->closeClient()", WADebug::SYSTEM);
+
+    // If client have something in transition (request or pending response), log an ABORT state
+
+    if ($this->socket)
+    {
+      @socket_shutdown($this->socket);
+      @socket_close($this->socket);
+      $this->socket = null;
+    }
+    $this->closed = time();
+  }
+
+  public function getListener()
+  {
+    return $this->listener;
+  }
+
+  public function getSocket()
+  {
+    return $this->socket;
+  }
+
+  public function getClientIP()
+  {
+    return $this->clientIP;
+  }
+
+  public function getClientPort()
+  {
+    return $this->clientPort;
+  }
+
+  // The protocol may ask to fork.
+  // In this case:
+  // the client listens its own socket, ignore the server till it dies
+  // the server is told to ignore this client
+  // the forked client still send notifications to master by pipe socket
+  public function fork()
+  {
+    // We are already a forked task !
+    if ($this->forked)
+      return true;
+
+    $pid=pcntl_fork();
+    if ($pid==-1)
+    {
+      throw new WAWASError("Error on FORK in Client->fork for Client");
+    }
+    else if ($pid === 0)  // FORKED CLIENT
+    {
+      if (function_exists('setproctitle'))
+        setproctitle('WAWAS Client #'.$this->clientIP.':'.$this->clientPort.chr(0));
+      $this->forked = true;
+      return true;
+    }
+    else // WORKER
+    {
+      if (self::$debug || $this->localdebug)
+        $this->doDebug("Client, pid = $pid created", WADebug::SYSTEM);
+      // tell the server to ignore us now
+      $this->base->server->removeClient($this->socket);
+    }
+    return false; // do not process further our request
+  }
+
+  private function takeServerControl()
+  {
+    $mainloop = true;
+    while ($mainloop)
+    {
+      // wait 1 ms between each loop (or at least what the machine lets have)
+      usleep(1000);
+
+// **** DO WE STILL NEED THIS ???
+      // hook loop
+      foreach($this->base->protocols as $protocol)
+        $protocol->callHooks('loop', null);
+
+      $readers = array($this->socket);
+        // make a non-blocking call with socket_select()
+      $numsockets = socket_select($readers, $_wr = NULL, $_ex = NULL, 0);
+// **** error, what do we do ???
+      if ($numsockets === false)
+        continue;
+
+      // nothing new
+      if ($numsockets !== 0)
+      {
+
+        // something new on our socket
+        $input = @socket_read($this->socket, 8192);
+
+        if ($input === false && socket_last_error() != 4)
+        {
+          // we have closed, we just die
+          die();
+        }
+
+        if ($input === '')
+        {
+          // we have closed, we just die
+          die();
+        }
+
+        // input with DATA
+
+        // we notify the master for stats
+        /*
+        if ($this->type == "Server")
+        {
+          $output = "Hit in child $this->serverID\n";
+          $ret = socket_write($this->socketmaster, $output);
+        }
+        */
+
+        // adds the info to the client which will decide the protocol and interpreter
+        $this->process($input);
+      }
+
+      if ($this->write())
+      { // returns true means "close me"
+        die();
+      }
+    } // we never end the loop until die
+  }
+
+  public function process($str)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("Client->addtempbuffer($str)", WADebug::SYSTEM);
+
+    // call MODULES with ALL INFO incoming
+//********
+// SHOULD CALL ALL PROTOCOLS ? STATS ? FROM SERVER DIRECTLY ?
+    if ($this->protocol)
+      $this->protocol->callHooks('receivedata', array($this, $str));
+
+    // We have found the protocol, lets build the response if any to send yet
+    if ($this->protocol)
+    {
+      $this->protocol->process($str, $this->request, $this->response);
+      return;
+    }
+
+    // check if we match with any protocol ?
+    $this->tempbuffer .= $str;
+    foreach($this->listener->protocols as $protocol)
+    {
+      if ($this->base->protocols[$protocol]->check($this->tempbuffer))
+      {
+        $this->protocol = $this->base->protocols[$protocol];
+        $this->request = $this->protocol->createRequest($this);
+        $this->response = $this->protocol->createResponse();
+        // the protocol will decide if we fork or not (based on needs)
+        if (!$this->protocol->beforeprocess($this))
+        {
+          // do nohing more if false: we are into worker. The forked process takes charge of anything from now
+          return;
+        }
+        $this->protocol->process($this->tempbuffer, $this->request, $this->response);
+        $this->tempbuffer = null;
+        break;
+      }
+    }
+    // if we are forked, we should get control of socket and die at the end
+    if ($this->forked)
+      $this->takeServerControl();
+  }
+
+  // write to socket OR ENQUEUE data to write if saturated
+  public function senddata($data)
+  {
+    $len = strlen($data);
+    if (!$this->datapending)
+    {
+      if (self::$debug || $this->localdebug)
+        $this->doDebug("Socket write output: ". print_r(substr($data, 0, 10).'...', true), WADebug::INFO);
+
+      $num = @socket_write($this->socket, $data);
+    }
+    else
+      $num = 0;
+
+    if ($len != $num)
+    {
+      // push data
+      $this->datapending = true;
+      array_push($this->datastack, substr($data, $num));
+    }
+    return $this->datapending;
+  }
+
+  // write a chunk to the client, and disconnect if $data is NULL
+  public function sendChunk($data, $sized = true)
+  {
+    if ($data)
+    {
+      if ($sized)
+      {
+        $data = 'chunk=' . strlen($data) . ';' . $data;
+      }
+      $len = dechex(strlen($data));
+      $this->senddata($len . "\r\n".$data."\r\n");
+    }
+    else
+    {
+      $this->senddata("0\r\n\r\n");
+      $this->dataclose = true;
+    }
+  }
+
+  // Write anything pending. Returns TRUE if we want to close the client
+  public function write()
+  {
+    if (!$this->datapending)
+      return $this->dataclose;
+    $todo = true;
+    while ($todo)
+    {
+      $data = $this->datastack[0];
+      $len = strlen($data);
+
+      if (self::$debug || $this->localdebug)
+        $this->doDebug("Socket write output: ". print_r(substr($data, 0, 10).'...', true), WADebug::INFO);
+
+      $num = @socket_write($this->socket, $data);
+
+      if ($num == $len)
+      {
+        array_shift($this->datastack);
+        if (sizeof($this->datastack) == 0)
+        {
+          $todo = false;
+          $this->datapending = false;
+        }
+      }
+      else if ($num > 0)
+      {
+        $this->datastack[0] = substr($data, $num);
+        $todo = false;
+      }
+      else
+        $todo = false;
+    }
+    return ($this->dataclose && !$this->datapending);
+  }
+
+}
+
+?>

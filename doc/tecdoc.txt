@@ -1,0 +1,23 @@
+WAWAS:
+
+FAQ:
+
+1. Why WAWAS is much more than a simple WebServer ?
+
+WAWAS is an Application Server, same as Tomcat for example.
+You can use WAWAS to embed PSP pages (PHP-Server-Pages), 
+PHP Beans or PHP Servlets.
+The whole object components is available to build powerfull 
+application on this technologies with PHP 5
+
+
+
+
+2. Why all the objects are called "WAWASSomething" ?
+
+The goal of WAWAS is to integrate directly your PHP code as beans, servlets, etc without using 
+any CGI interfase.
+To not interfere with your objects and with standards objects, we decided to name all the basic
+WAWAS objects this way. 
+Do not name your objects WAWASSomething !
+

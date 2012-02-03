@@ -1,0 +1,101 @@
+<?php
+
+class ModuleFile extends Module
+{
+  private $icons = array();
+
+  private $def = array(
+    'icons' => array(
+        'file' => array('type' => 'file', 'mandatory' => false, 'default' => 'conf/icons.conf') ),
+     );
+
+  function __construct($name)
+  {
+    parent::__construct($name);
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ModuleFile->__construct()", WADebug::SYSTEM);
+
+    $this->base->config->addDef('', $this->def);
+  }
+
+  public function start($protocol)
+  {
+    // load icons
+    $iconfile = $this->base->config->getEntry('icons/file');
+    if (!is_file($iconfile))
+      throw new WAWASError("Error, the icons config file does not exist: ".$iconfile);
+    $icons = file($iconfile);
+    foreach ($icons as $icon)
+    {
+      if (!trim($icon))
+        continue;
+      if (substr(trim($icon), 0, 1) == '#')
+        continue;
+      $type = strtok($icon, " \t");
+      $ext = strtok('');
+      if (!$type || !$ext)
+        continue;
+      $xext = explode(' ', $ext);
+      foreach($xext as $e)
+      {
+        $this->icons[trim($e)] = trim($type);
+      }
+    }
+
+    // Register hook to process requests
+    $protocol->registerHook('process', $this->name, "process");
+  }
+
+  // we should passthrough files without memory cache ? any send hook function ?
+  public function process($request, $response)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ModuleFile->process($request, $response)", WADebug::SYSTEM);
+
+    if ($response->content)
+      return;
+    $path = $request->getRequest('path');
+    $name = $this->getName($request->vhost, $path);
+    // This is not a directory, we are not interested
+    if (!$name)
+      return;
+
+    $text = '';
+    if ($dh = opendir($name))
+    {
+      while (($file = readdir($dh)) !== false)
+      {
+        $text .= '<a href="'.($path.'/'.$file).'"><b>'.$file.'</b></a> : ' . filetype($name . '/' . $file) . "<br />";
+      }
+      closedir($dh);
+    }
+    $response->setBody($text);
+
+    // Notify protocol: There is info !
+    $response->content = true;
+    // take the date of the file
+    $response->setHeader('Date', date ("r", time()));
+    $response->setHeader('Content-Length', $response->getBodyLength());
+    $response->setHeader('Content-Type', 'text/html');
+  }
+
+  private function getName($OV, $path)
+  {
+// SECURITY VERIFY    the file is NOT outside the root dir !!!! and is available and is authorized !!!
+// Any parameter to auth or not the .. into the path ?
+
+    $basedir = $OV->getdocumentroot();
+    $hasslash = false;
+    if (substr($basedir, -1) == '/')
+      $hasslash = true;
+    if (substr($path, 0, 1) == '/')
+      $hasslash = true;
+    $name = $basedir . ($hasslash?'':'/') . $path;
+    if (!is_dir($name))
+      return false;
+    return $name;
+  }
+
+}
+
+?>

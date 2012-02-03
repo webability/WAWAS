@@ -1,0 +1,104 @@
+<?php
+
+/*
+    WALanguage.lib, DomCore, the WebAbility(r) Core System
+    Contains the basic class to compile and XML language file to a readable PHP array
+    (c) 2008-2010 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box
+|------------------------------------------------------------------|
+| WALanguage: XML language reader                                  |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+| + ::compile($buffer: XML string): Array(string)                  |
+| - ::convert($xml: XMLNode): Array                                |
+| + ::create($id: string, $lang: string, $data: array of langs): string |
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+// Static class to compile language XML file
+class WALanguage
+{
+  public static $id;
+  public static $lang;
+
+  public static function compile($buffer)
+  {
+    $id = ''; $lang = '';
+    $TM = array();
+    if (strpos($buffer, '<?xml') !== false)
+    {
+      $xml = simplexml_load_string($buffer);
+      $tree = self::convert($xml);
+      if (isset($tree['tag']) && $tree['tag'] === 'language')
+      {
+        self::$id = $tree['attributes']['id'];
+        self::$lang = $tree['attributes']['lang'];
+        foreach ($tree as $k => $value)
+        {
+          if ($k === 'tag' || $k === 'attributes')
+            continue;
+          $TM[$value['attributes']['id']] = $value['data'];
+        }
+      }
+    }
+    return $TM;
+  }
+
+  private static function convert($xml)
+  {
+    if (!($xml instanceof SimpleXMLElement))
+      return $xml;
+
+    $nodename = $xml->getName();
+    $node = array('tag' => $nodename);
+
+    // 1. the attributes
+    foreach ($xml->attributes() as $name => $value)
+    {
+      $node['attributes'][$name] = (string)$value;
+    }
+
+    // 2. the children
+    foreach ($xml->children() as $name => $value)
+    {
+      $node[] = self::convert($value);
+    }
+
+    // 3. the content data
+    $data = trim((string)$xml);
+    if ($data)
+      $node['data'] = $data;
+
+    return $node;
+  }
+
+  public static function create($id, $language, $data)
+  {
+    $text = '<?xml version="1.0" encoding="UTF-8" ?>'.PHP_EOL.
+            '<language id="'.$id.'" lang="'.$language.'">'.PHP_EOL;
+    foreach ($data as $id => $val)
+      $text .= '  <entry id="'.$id.'"><![CDATA['.$val.']]></entry>'.PHP_EOL;
+    $text .= '</language>'.PHP_EOL;
+    return $text;
+  }
+
+}
+
+?>

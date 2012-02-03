@@ -1,0 +1,574 @@
+<?php
+
+/*
+Protocol is a TUBE: it does not retain any information, JUST process it
+It will create HTTPRequest and HTTPResponse if needed on new request
+*/
+
+final class ProtocolHTTP11 extends Protocol
+{
+  private $def = array(
+     'virtualhosts' => array(
+        'default' => array('type' => 'cont', 'data' => array(
+            'listener' => array('type' => 'loop', 'data' => 'str', 'mandatory' => true),
+            'documentroot' => array('type' => 'str', 'mandatory' => true),
+            'directoryindex' => array('type' => 'loop', 'mandatory' => true, 'data' => 'str'),
+            'maxheadersize' => array('type' => 'int', 'mandatory' => true, 'min' => 0, 'max' => 1000000),
+            'maxheaders' => array('type' => 'int', 'mandatory' => true, 'min' => 0, 'max' => 100),
+            'maxgets' => array('type' => 'int', 'mandatory' => true, 'min' => 0, 'max' => 400),
+            'maxcookies' => array('type' => 'int', 'mandatory' => true, 'min' => 0, 'max' => 400),
+            'maxposts' => array('type' => 'int', 'mandatory' => true, 'min' => 0, 'max' => 400),
+            'maxfiles' => array('type' => 'int', 'mandatory' => true, 'min' => 0, 'max' => 100),
+            'maxpostsize' => array('type' => 'int', 'mandatory' => true, 'min' => 0, 'max' => 10000000000),
+            'maxpostfile' => array('type' => 'int', 'mandatory' => true, 'min' => 0, 'max' => 10000000000),
+
+            'error' => array('type' => 'loop', 'mandatory' => false, 'data' => array(
+                'code' => array('type' => 'int', 'mandatory' => true, 'min' => 100, 'max' => 999),
+                'message' => array('type' => 'str', 'mandatory' => true, 'default' => ''),
+                'template' => array('type' => 'str', 'mandatory' => true, 'default' => 'templates/error.template'),
+                )),
+
+             'module' => array('type' => 'loop', 'data' => 'str', 'mandatory' => true),
+             ) ),
+        'virtualhost' => array('type' => 'loop', 'data' => array(
+            'listener' => array('type' => 'loop', 'data' => 'str', 'mandatory' => false),
+            'hostname' => array('type' => 'loop', 'data' => 'str', 'mandatory' => false),
+            'documentroot' => array('type' => 'str', 'mandatory' => false),
+            'directoryindex' => array('type' => 'loop', 'mandatory' => false, 'data' => 'str'),
+
+            'maxgets' => array('type' => 'int', 'mandatory' => false, 'min' => 0, 'max' => 400),
+            'maxcookies' => array('type' => 'int', 'mandatory' => false, 'min' => 0, 'max' => 400),
+            'maxposts' => array('type' => 'int', 'mandatory' => false, 'min' => 0, 'max' => 400),
+            'maxfiles' => array('type' => 'int', 'mandatory' => false, 'min' => 0, 'max' => 100),
+            'maxpostsize' => array('type' => 'int', 'mandatory' => false, 'min' => 0, 'max' => 10000000000),
+            'maxpostfile' => array('type' => 'int', 'mandatory' => false, 'min' => 0, 'max' => 10000000000),
+
+            'error' => array('type' => 'loop', 'mandatory' => false, 'data' => array(
+                'code' => array('type' => 'int', 'mandatory' => true, 'min' => 100, 'max' => 999),
+                'message' => array('type' => 'str', 'mandatory' => true, 'default' => ''),
+                'template' => array('type' => 'str', 'mandatory' => true, 'default' => 'templates/error.template'),
+                )),
+
+            'module' => array('type' => 'loop', 'data' => 'str', 'mandatory' => false),
+        ) ) )
+     );
+
+  private $protocolmatch = '/^(GET|POST|PUT|DELETE|HEAD|OPTIONS|TRACE)\s(.*?)\sHTTP\/1\.(0|1)\v/i';
+  private $hostnames = array();
+
+  public function __construct()
+  {
+    parent::__construct();
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ProtocolHTTP11->__construct()", WADebug::SYSTEM);
+
+    $this->base->config->addDef('', $this->def);
+  }
+
+  public function start()
+  {
+    parent::start();
+
+    // Read and create the virtual hosts
+    $vhosts = $this->base->config->getEntry('virtualhosts/virtualhost');
+    $defaultvhost = $this->base->config->getEntry('virtualhosts/default');
+
+    if (!$vhosts)
+      $vhosts = array($defaultvhost);
+    foreach($vhosts as $vhost)
+    {
+      // check if the vhost listen on this listener
+      $OV = new VirtualHost($this->base->config->applydefault($vhost, $defaultvhost));
+      // Register listener into listener list
+      $hostnames = $OV->getHostNames();
+      foreach($hostnames as $hostname)
+      {
+        if (isset($this->hostnames[$hostname]))
+          throw new WAWASError('Duplicate hostname found: ' . $hostname);
+        if (self::$debug || $this->localdebug)
+          $this->doDebug("VirtualHost registered: $hostname", WADebug::INFO);
+
+        $this->hostnames[$hostname] = $OV;
+      }
+    }
+  }
+
+  public function createRequest($client)
+  {
+    $r = new HTTPRequest();
+    $r->protocol = $this;
+    $r->client = $client;
+    return $r;
+  }
+
+  public function createResponse()
+  {
+    return new HTTPResponse();
+  }
+
+  public function check($buffer)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ProtocolHTTP11->check($buffer)", WADebug::SYSTEM);
+
+    return preg_match($this->protocolmatch, $buffer);
+  }
+
+  public function beforeprocess($client)
+  {
+    // Should we always fork ? any special rule ? who decides ? module ? process ?
+    return $client->fork();
+  }
+
+  // PROTOCOL HTTP 1.1 ALGORITHM:
+  // This is a STATE machine:
+  //   - HEADERS: NO => INCOMPLETE => YES
+  //   - BODY: NO => INCOMPLETE => YES with special substate: FILES
+  // There are 3 modules entry points:
+  //   - On data receive no matter what it is
+  //   - On header ready, call with request
+  //   - When the request is fully received, call the process with virtual host
+  // WHEN response has been calculated and sent back, reset request and response for a new turn (protocol 1.1 reuse socket for next request)
+  // If protocol 1.0, just close the socket at the end (the remote client should do it also)
+  public function process($data, $request, $response)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ProtocolHTTP11->process($data, $request, $response)", WADebug::SYSTEM);
+
+    try
+    {
+      $maxheadersize = $this->base->config->getEntry('virtualhosts/default/maxheadersize');
+
+      if (!$request->hasheaders)
+      {
+        $request->rawheaders .= $data;
+
+        $lengthlimit = $pos = 0;
+        if (($pos=strpos($request->rawheaders, "\r\n\r\n"))!==false)
+          $lengthlimit=4;
+        else if (($pos=strpos($request->rawheaders, "\n\n"))!==false)
+          $lengthlimit=2;
+        else if (($pos=strpos($request->rawheaders, "\r\r"))!==false)
+          $lengthlimit=2;
+        if ($lengthlimit)
+        {
+          // cuts the buffer in header + body
+          $request->hasheaders = true;
+          $request->rawbody = substr($request->rawheaders, $pos+$lengthlimit);
+          $request->rawheaders = substr($request->rawheaders, 0, $pos+$lengthlimit);
+
+          if (strlen($request->rawheaders) > $maxheadersize)
+          {
+            $response->setReponse(401, 'Error: the received header is too large.');
+            throw WAWASError('');
+          }
+
+          // parse the headers, get in the package the VHOST
+          $this->parseHeaders($request, $response);
+          // check if the body has length or still wait for info
+
+          // call MODULES with HEADER info
+//*********
+// SHOULD BE filtered by vhost
+          $this->callHooks('header', array($request, $response));
+          if (!$request->needbody)
+          {
+            $request->lengthbody = strlen($request->rawbody);
+            $request->rawbody = '';
+          }
+        }
+      }
+      else
+      {
+        if ($request->needbody)
+          $request->rawbody .= $data;
+        else // we just keep the length of what came in body, but we do not want the body
+          $request->lengthbody += strlen($data);
+      }
+
+      if ($request->hasheaders && !$request->hasbody)
+      {
+        if ($request->needbody)
+        {
+          // wait for the full body
+          if (isset($request->headers["content-length"]) && $request->headers["content-length"])
+          {
+            // we ignore oversized body
+            if (strlen($request->rawbody) > $request->headers["content-length"])
+              $request->rawbody = substr($request->rawbody, 0, $request->headers["content-length"]);
+            elseif (strlen($request->rawbody) == $request->headers["content-length"])
+            {
+              // nothing to do ?? really ??
+            }
+            else
+            {
+              // check the files, they should be used as temporal files
+
+              $percent = strlen($request->rawbody) / $request->headers["content-length"];
+//*********
+// SHOULD BE filtered by vhost
+              $this->callHooks('loading', array($this, $request, $percent));
+              return;  // the request is not complete yet, error or connection error, so we cannot parse
+            }
+          }
+          else
+            $request->rawbody = null;  // we ignore anything else
+        }
+        else
+        {
+          // wait for the full body
+          if (isset($request->headers["content-length"]) && $request->headers["content-length"])
+          {
+            // we ignore oversized body
+            if ($request->lengthbody < $request->headers["content-length"])
+            {
+              return;  // the request is not complete yet, error or connection error, so we cannot parse
+            }
+          }
+        }
+
+        // Getting here means the BODY IS FULLY RECEIVED
+        if ($request->rawbody)
+        {
+
+          $request->posts = $this->parseBody($request->vhost, $request->rawbody, $response);
+  //*** FILES SHOULD BE MANAGED BY MODULE ?, ONLY IF MODULE IS INSTERESTED BY FILE (static is NOT interested by POSTs for example)
+  //*** FILES SHOULD NOT BE ADDED DIRECTLY TO BODY BUT ON LOCAL TMP FILE
+  // CHECK IF ANY MODULE IS INTERESTED BY POSTS TO IGNORE THEM OR NOT (MEMORY/DISK SAVING) (WE KNOW THIS ONCE WE HAVE HEADERS)
+
+
+        }
+        $request->hasbody = true;
+      }
+
+      if ($request->hasheaders && $request->hasbody)
+      {
+        $this->run($request, $response);
+
+        // Could we build a response ? NO => 404 not found !
+        if (!$response->content)
+        {
+          $response->setResponse(404, 'File not found');
+          $content = 'Error 404, File not found';
+          $response->setHeader('Content-Type', 'text/html; charset=utf-8');
+          $response->setHeader('Content-Length', strlen($content));
+          $response->setBody($content);
+        }
+
+        $data = $this->buildResponseHeader($request, $response);
+        $request->client->senddata($data . $response->getData());
+
+        // when all has been processed, reinit it for further responses on same socket
+        $version = $request->getHTTP('version');
+        if ($version == '1.1')
+        {
+          // HTTP 1.1: we are kept-alive:
+          $request->clear();
+          $response->clear();
+        }
+        else
+        {
+          // HTTP 1.0: we just disconnect
+          $request->client->dataclose = true;
+        }
+      }
+    }
+    catch (Throwable $E)
+    {
+      // send back a 501 ?
+      $response->content = true;
+      $content = $response->getResponseMessage();
+      $response->setHeader('Content-Type', 'text/html; charset=utf-8');
+      $response->setHeader('Content-Length', strlen($content));
+      $response->setBody($content);
+      $data = $this->buildResponseHeader($request, $response);
+      $request->client->senddata($data . $response->getData());
+    }
+
+  }
+
+  private function run($request, $response)
+  {
+    // running HTTP protocol:
+    // 3. call modules, protocol, mimes, icons etc
+
+    // We have to check if directory and add the directoryindex if found to the request
+    $this->verifyPath($request);
+
+    // filtered by vhost
+    $mymodules = $request->vhost->getModules();
+    foreach($this->getHooks('process') as $m => $function)
+    {
+      if (!in_array($m, $mymodules))
+        continue;
+      $this->modules[$m]->$function($request, $response);
+    }
+  }
+
+  private function verifyPath($request)
+  {
+    $basedir = $request->vhost->getdocumentroot();
+    $path = $request->getRequest('path');
+    if (!is_dir($basedir . $path))
+      return;
+    if (substr($basedir . $path, -1) != '/')
+      $path .= '/';
+    // search for the indexes into this dir
+    // Check if the result is not OUTSIDE our jailed path
+
+    $indexes = $request->vhost->getindex();
+    if ($indexes)
+    {
+      foreach($indexes as $index)
+      {
+        $newname = $basedir . $path . $index;
+        if (is_file($newname))
+        {
+          $request->request = $this->parseRequest($path . $index);
+          return;
+        }
+      }
+    }
+  }
+
+  private function parseHeaders($request, $response)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ProtocolHTTP11->parseHeaders()", WADebug::SYSTEM);
+
+    $maxheaders = $this->base->config->getEntry('virtualhosts/default/maxheaders');
+
+    $lineheaders=explode("\n", $request->rawheaders);
+    if (sizeof($lineheaders) > $maxheaders)
+    {
+      $response->setReponse(401, 'Error: there are too much header lines.');
+      throw WAWASError('');
+    }
+
+    $item = 0;
+    $cookies = '';
+    foreach ($lineheaders as $line)
+    {
+      $line=trim($line);
+      if (!$item++)
+      {
+        // this is first line
+        $http['method'] = strtok($line, ' /');
+        $http['request'] = strtok(' ');
+        $http['protocol'] = strtoupper(strtok('/'));
+        $http['version'] = strtok('');
+        if ($http['protocol']!='HTTP' || ($http['version']!='1.0' && $http['version']!='1.1'))
+        {
+          $response->setReponse(401, 'Error: unkown or malformed protocol.');
+          throw WAWASError('');
+        }
+        else
+        {
+          $request->http = $http;
+          $request->request = $this->parseRequest($http['request']);
+        }
+      }
+      else
+      {
+
+        if (!$line)
+          continue;
+        if (strpos($line, ":")===false)
+        {
+          $this->error = true;
+        }
+        else
+        {
+          $key = strtolower(strtok($line, ":"));
+          $val = trim(strtok(""));
+          $request->headers[$key] = $val;
+          if ($key == 'cookie')
+            $cookies = $val;
+        }
+      }
+    }
+
+    // Verify host
+    $host = $request->getHeader('host');
+    if (!$host)
+    {
+      $response->setResponse(400, 'Missing HOST in header');
+      throw WAWASError('');
+    }
+
+    if (!isset($this->hostnames[$host]))
+    {
+      $response->setResponse(501, "No host match =$host=");
+      throw WAWASError('');
+    }
+
+    $vhost = $this->hostnames[$host];
+    // Check if the vhost works on THIS listener !!!
+    $listeners = $vhost->getListeners();
+    $mylistener = $request->client->getListener()->getName();
+    if (!in_array($mylistener, $listeners))
+    {
+      // bad host in bad listener, so the host "does not exists"
+      $response->setResponse(501, "No host match =$host=");
+      throw WAWASError('');
+    }
+    $request->vhost = $vhost;
+
+    // get the GET variables
+    $request->gets = $this->parseGets($vhost, $http['request'], $response);
+    if ($cookies)
+      $request->cookies = $this->parseCookies($vhost, $cookies, $response);
+  }
+
+  private function parseRequest($data)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ProtocolHTTP11->parseRequest($data)", WADebug::SYSTEM);
+
+    /* REG EXP supposed to parse totally the request
+      ^(?#Protocol)(?:(?:ht|f)tp(?:s?)\:\/\/|~\/|\/)?(?#Username:Password)(?:\w+:\w+@)?(?#Subdomains)(?:(?:[-\w]+\.)+(?#TopLevel Domains)(?:com|org|net|gov|mil|biz|info|mobi|name|aero|jobs|museum|travel|[a-z]{2}))(?#Port)(?::[\d]{1,5})?(?#Directories)(?:(?:(?:\/(?:[-\w~!$+|.,=]|%[a-f\d]{2})+)+|\/)+|\?|#)?(?#Query)(?:(?:\?(?:[-\w~!$+|.,*:]|%[a-f\d{2}])+=?(?:[-\w~!$+|.,*:=]|%[a-f\d]{2})*)(?:&(?:[-\w~!$+|.,*:]|%[a-f\d{2}])+=?(?:[-\w~!$+|.,*:=]|%[a-f\d]{2})*)*)*(?#Anchor)(?:#(?:[-\w~!$+|.,*:=]|%[a-f\d]{2})*)?$
+*/
+
+    $p = strpos($data,'?');
+    $query = '';
+    if ($p === false)
+      $path = $data;
+    else
+    {
+      $path = substr($data, 0, $p);
+      $query = substr($data, $p+1);
+    }
+    $rp = strrpos($path, '/');
+    if ($rp === false)
+    {
+      $file = $path;
+      $dir = '';
+    }
+    else
+    {
+      $file = substr($path, $rp+1);
+      $dir = substr($path, 0, $rp+1);
+    }
+    $re = strrpos($file, '.');
+    if ($re === false)
+      $ext = '';
+    else
+      $ext = substr($file, $re+1);
+    return array('path' => $path, 'dir' => $dir, 'file' => $file, 'ext' => $ext, 'query' => $query);
+  }
+
+  private function parseGets($vhost, $data, $response)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ProtocolHTTP11->parseGets($data)", WADebug::SYSTEM);
+
+    $maxgets = $vhost->getEntry('maxgets');
+    $gets = array();
+    if (!($p = strpos($data,'?')))
+      return $gets;
+    $q = substr($data, $p+1);
+    if ($q)
+    {
+      $vars = explode('&', $q);
+      if (sizeof($vars) > $maxgets)
+      {
+        $response->setResponse(401, "Too much GET variables.");
+        throw WAWASError('');
+      }
+      foreach ($vars as $var)
+      {
+        $varpart = explode('=', $var);
+        $gets[$varpart[0]] = isset($varpart[1])?$varpart[1]:null;
+      }
+    }
+    return $gets;
+  }
+
+  private function parseCookies($vhost, $cookies, $response)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ProtocolHTTP11->parseCookies()", WADebug::SYSTEM);
+
+    $maxcookies = $vhost->getEntry('maxcookies');
+    $xcookies = array();
+    $xc = explode(';', $cookies);
+    if (sizeof($xc) > $maxcookies)
+    {
+      $response->setResponse(401, "Too much COOKIES in header.");
+      throw WAWASError('');
+    }
+    foreach($xc as $c)
+    {
+      $name = strtok($c, '=');
+      $value = strtok('');
+      $xcookies[$name] = rawurldecode($value);
+    }
+    return $xcookies;
+  }
+
+  private function parseBody($vhost, $body, $response)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ProtocolHTTP11->parseBody()", WADebug::SYSTEM);
+
+    // Parse all the POST variables into the body
+    // FILES should be put into the temp directory BEFORE stocking them into memory
+
+    $posts = array();
+    $xp = explode('&', $body);
+    foreach($xp as $v)
+    {
+      $xv = explode('=', $v);
+      $posts[$xv[0]] = rawurldecode($xv[1]);
+    }
+    return $posts;
+  }
+
+  private function buildResponseHeader($request, $response)
+  {
+    $data = 'HTTP/' . $request->getHTTP('version') . ' ' . $response->getResponseCode() . ' ' . $response->getResponseMessage() . Constants::CRLF;
+
+    // Be sure there are some headers
+    $response->setHeader('Server', 'WAWAS 1.00.01 (Unix)');
+
+    // cookies
+/*
+    $cookies = $response->getCookie();
+    $ck = '';
+    foreach($cookies as $cookie)
+    {
+      if (!$id)
+        continue;
+      $data .= $id . ': ' . $header . Constants::CRLF;
+    }
+*/
+    $headers = $response->getHeader();
+    foreach($headers as $id => $header)
+    {
+      if (!$id)
+        continue;
+      $data .= $id . ': ' . $header . Constants::CRLF;
+    }
+
+    $data .= Constants::CRLF;
+
+    return $data;
+  }
+
+  private function buildError($request, $response, $code, $message)
+  {
+    // Gets the message from config if any ?
+    $response->setResponse($code, $message);
+    $content = 'Error '.$code.', '.$message;
+
+    // gets a template error ????
+
+    $response->setHeader('Content-Type', 'text/html; charset=utf-8');
+    $response->setHeader('Content-Length', strlen($content));
+    $response->setBody($content);
+    throw new WAWASError('');
+  }
+
+}
+
+?>

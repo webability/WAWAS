@@ -1,0 +1,7 @@
+ADMIN INDEX<br />
+<a href="?order=config">Watch config</a><br />
+<a href="?order=hierarchy">Listeners / Clients / Protocols / Modules</a><br />
+<a href="?order=worker">Workers and Memory</a><br />
+<a href="?order=stats">Stats</a><br />
+
+

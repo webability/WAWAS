@@ -1,0 +1,162 @@
+<?php
+
+/*
+    FileSource.lib, DomCore, the WebAbility(r) Core System
+    Contains the basic file access object
+    (c) 2008-2011 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| FileSource : Basic file access                                   |
+|------------------------------------------------------------------|
+| - ::init : boolean                                               |
+| - ::messages : array(string => string)                           |
+| # basepath : string                                              |
+| # path : string                                                  |
+| # filename : string                                              |
+| # createdir : boolean                                            |
+|------------------------------------------------------------------|
+| + new FileSource($basepath: string, $path: string, $filename: string) |
+| + setCreateDir($flag: boolean) : void                            |
+| + isValid() : boolean                                            |
+| + getTimestamp() : integer                                       |
+| + getPath() : string                                             |
+| + getFilename() : string                                         |
+| + read() : mixed                                                 |
+| + write($data: mixed) : void                                     |
+| + unlink() : void                                                |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+class FileSource extends DataSource
+{
+  private static $init = false;
+  private static $messages = array(
+    'FileSource.fileerror' => 'The file could not be opened for writing: '
+  );
+
+  protected $basepath = '';  // absolute, terminated by /
+  protected $path = '';      // terminated by /
+  protected $filename = '';
+  protected $createdir = false;
+
+  public function __construct($basepath, $path, $filename, $createdir = false)
+  {
+    if (!self::$init)
+    {
+      // send messages to WAMessage
+      WAMessage::addMessages(self::$messages);
+      self::$init = true;
+    }
+
+    parent::__construct(null);
+
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/datasource/FileSource->__construct($basepath, $path, $filename, $createdir)", WADebug::SYSTEM);
+
+    $this->basepath = $basepath;
+    if ($this->basepath && substr($this->basepath, -1) != '/')
+      $this->basepath .= '/';
+    $this->path = $path;
+    if ($this->path && substr($this->path, -1) != '/')
+      $this->path .= '/';
+    $this->filename = $filename;
+    $this->createdir = $createdir;
+  }
+
+  public function setCreateDir($flag)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/datasource/FileSource->setCreateDir($flag)", WADebug::SYSTEM);
+    $this->createdir = $flag;
+  }
+
+  public function isValid()
+  {
+    if (self::$debug || $this->localdebug)
+    {
+      $this->doDebug('include/datasource/FileSource->isValid()', WADebug::SYSTEM);
+      $this->doDebug('include/datasource/FileSource->isValid::FilePath = '.$this->basepath.$this->path.$this->filename, WADebug::INFO);
+    }
+    clearstatcache();
+    return file_exists($this->basepath.$this->path.$this->filename);
+  }
+
+  public function getTimeStamp()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug('include/datasource/FileSource->getTimeStamp()', WADebug::SYSTEM);
+    clearstatcache();
+    $tm = @filemtime($this->basepath.$this->path.$this->filename);
+    return $tm;
+  }
+
+  public function getPath()
+  {
+    return $this->path;
+  }
+
+  public function getFilename()
+  {
+    return $this->filename;
+  }
+
+  public function read($asarray = false)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/datasource/FileSource->read($asarray)", WADebug::SYSTEM);
+    clearstatcache();
+    if (!file_exists($this->basepath.$this->path.$this->filename))
+      return null;
+    $size = filesize($this->basepath.$this->path.$this->filename);
+    if (!$size)
+      return null;
+    if ($asarray)
+      $data = file($this->basepath.$this->path.$this->filename);
+    else
+      $data = file_get_contents($this->basepath.$this->path.$this->filename);
+    return $data;
+  }
+
+  public function write($data)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/datasource/FileSource->write($data)", WADebug::SYSTEM);
+    if ($this->createdir)
+      WAFile::createDirectory($this->basepath, $this->path); // throw error if cannot create
+
+    $fp = fopen($this->basepath.$this->path.$this->filename, 'wb');
+    if (!$fp)
+      throw new DataSourceError(WAMessage::getMessage('FileSource.fileerror').$this->basepath.$this->path.$this->filename);
+    fwrite($fp, $data);
+    fclose($fp);
+    return true;
+  }
+
+  public function unlink()
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug('include/datasource/FileSource->unlink()', WADebug::SYSTEM);
+    unlink($this->basepath.$this->path.$this->filename);
+  }
+
+}
+
+?>

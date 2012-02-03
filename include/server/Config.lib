@@ -1,0 +1,294 @@
+<?php
+
+class Config extends WAObject
+{
+  private $configxml;
+  private $firstscan = array(
+        'protocol' => array('type' => 'loop', 'data' => array(
+            'name' => array('type' => 'str', 'mandatory' => true),
+            'lib' => array('type' => 'str', 'mandatory' => true),
+            'module' => array('type' => 'loop', 'data' => array(
+                'name' => array('type' => 'str', 'mandatory' => true),
+                'lib' => array('type' => 'str', 'mandatory' => true) ) ) )
+          ) );
+
+  // DEBUG MODE; pass to private after
+  public $def = array(
+    'server' => array(
+        'serverroot' => array('type' => 'dir', 'mandatory' => false, 'default' => './', 'condition' => 'wawas.php'),
+        'servername' => array('type' => 'str', 'mandatory' => true),
+        'serveradmin' => array('type' => 'mail', 'mandatory' => true),
+        'locale' => array('type' => 'str', 'mandatory' => false),
+        'timezone' => array('type' => 'str', 'mandatory' => false),
+        'maxconnections' => array('type' => 'int', 'mandatory' => false, 'default' => 200, 'min' => 1, 'max' => 1000),
+        'bufferlength' => array('type' => 'int', 'mandatory' => false, 'default' => 8152, 'min' => 8152, 'max' => 256000) ),
+    'daemon' => array(
+        'status' => array('type' => 'bool', 'mandatory' => false, 'default' => 'off'),
+        'pidfile' => array('type' => 'file', 'mandatory' => false, 'default' => 'wawas.lock') ),
+    'workers' => array(
+        'status' => array('type' => 'bool', 'mandatory' => false, 'default' => 'off'),
+        'maxworkers' => array('type' => 'int', 'mandatory' => false, 'default' => 1, 'min' => 0, 'max' => 1000000) ),
+    'multithread' => array(
+        'status' => array('type' => 'bool', 'mandatory' => false, 'default' => 'yes'),
+        'maxthreads' => array('type' => 'int', 'mandatory' => false, 'default' => 1, 'min' => 0, 'max' => 1000000)
+),
+    'listeners' => array(
+        'default' => array('type' => 'cont', 'data' => array(
+            'ip' => array('type' => 'ip', 'mandatory' => true),
+            'port' => array('type' => 'port', 'mandatory' => true),
+            'maxconnections' => array('type' => 'int', 'mandatory' => true),
+            'bufferlength' => array('type' => 'int', 'mandatory' => false),
+            'protocol' => array('type' => 'str', 'mandatory' => true) ) ),
+        'listener' => array('type' => 'loop', 'data' => array(
+            'name' => array('type' => 'str', 'mandatory' => true),
+            'ip' => array('type' => 'ip', 'mandatory' => false),
+            'port' => array('type' => 'port', 'mandatory' => false),
+            'maxconnections' => array('type' => 'int', 'mandatory' => false),
+            'bufferlength' => array('type' => 'int', 'mandatory' => false),
+            'protocol' => array('type' => 'str', 'mandatory' => false) ) ) )
+    );
+
+  private $data = array();
+
+  function __construct($config)
+  {
+    parent::__construct();
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("Config->__construct($config)", WADebug::SYSTEM);
+
+    if (!is_file($config))
+      throw new WAWASError("Config file $config not found.");
+
+    $this->loadConfig($config, true);
+
+    $this->data = $this->parse($this->firstscan, $this->configxml);
+/*
+    foreach($this->firstscan as $d => $def)
+    {
+      if (!isset($this->configxml->$d))
+        throw new WAWASError('There is no ['.$d.'] directive into the config file');
+    }
+    */
+  }
+
+  function xmlappend($father, $children)
+  {
+    // check class
+    if ((get_class($father) == 'SimpleXMLElement') && (get_class($children) == 'SimpleXMLElement'))
+    {
+      // check if the value is string value / data
+      if (trim((string) $children) == '')
+      {
+        // add element and attributes
+        $element = $father->addChild($children->getName());
+        foreach ($children->attributes() as $attKey => $attValue)
+        {
+          $element->addAttribute($attKey, $attValue);
+        }
+        // add children
+        foreach ($children->children() as $child)
+        {
+          $this->xmlappend($element, $child);
+        }
+      }
+      else
+      {
+        // set the value of this item
+        $element = $father->addChild($children->getName(), trim((string) $children));
+      }
+    }
+    else
+    {
+      // throw an error
+      throw new WAWASError('Error, the expected parameters were not SimpleXMLElement');
+    }
+  }
+
+  private function checklevel($data)
+  {
+    // scan for <files> tags
+    foreach($data as $e => $r)
+    {
+      if ($e == 'include')
+      {
+        $redata = $this->loadConfig((string)$r, false);
+        foreach($redata as $children)
+          $this->xmlappend($data, $children);
+      }
+      else
+      {
+        $this->checklevel($r);
+      }
+    }
+    unset($data->include);
+  }
+
+  private function loadConfig($file, $root)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("Config->loadConfig($file, $root)", WADebug::SYSTEM);
+
+    if (!($data = simplexml_load_file($file)))
+      throw new WAWASError("Error during parsing config file $file.");
+
+    $this->checklevel($data);
+
+    if ($root)
+      $this->configxml = $data;
+    else
+      return $data;
+  }
+
+  // =====================================================
+  // Definition control
+  // =====================================================
+  public function addDef($path, $def)
+  {
+    $xentry = explode('/', $path);
+    $local = &$this->def;
+    foreach($xentry as $anentry)
+    {
+      if (!$anentry)
+        continue;
+      if (!isset($local[$anentry]))
+        throw new WAWASError('Error, entry '.$anentry.' does not exists into the config definition.');
+      $local = &$local[$anentry];
+    }
+    foreach($def as $k => $v)
+      $local[$k] = $v;
+  }
+
+  // =====================================================
+  // MAIN PARSER
+  // =====================================================
+  public function parseConfig()
+  {
+    foreach($this->def as $d => $def)
+    {
+      if (!isset($this->configxml->$d))
+        throw new WAWASError('There is no ['.$d.'] directive into the config file');
+      $this->data[$d] = $this->parse($def, $this->configxml->$d);
+    }
+  }
+
+  private function parse($parserdef, $config)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("Config->parse($parserdef, [XML config params])", WADebug::SYSTEM);
+
+    $result = array();
+    foreach($parserdef as $var => $def)
+    {
+      $val = null;
+      if (isset($config->$var))
+        $val = sprintf($config->$var);
+      if (!$val && isset($def['mandatory']) && $def['mandatory'])
+        throw new WAWASError('Error: ['.$var.'] is mandatory. Context: '.var_export($parserdef, true).var_export($config, true));
+      if (!$val && isset($def['default']))
+        $val = $def['default'];
+      switch($def['type'])
+      {
+        case 'dir':
+          if (!is_dir($val))
+            throw new WAWASError('Error: ['.$var.'] is not a valid directory: '.$val);
+          if ($def['condition'] && !is_file($val.'/'.$def['condition']))
+            throw new WAWASError('Error: ['.$var.'] must contain '.$def['condition']);
+          break;
+        case 'file':
+//          if (!is_file($val))
+//            throw new WAWASError('Error: ['.$var.'] is not a valid file: '.$val);
+//          if ($def['condition'] && !is_file($val.'/'.$def['condition']))
+//            throw new WAWASError('Error: ['.$var.'] must contain '.$def['condition']);
+          break;
+        case 'str':
+          break;
+        case 'bool':
+          $val = trim(strtolower($val));
+          if ($val == 'on' || $val == '1' || $val == 'yes' || $val == 'true')
+            $val = true;
+          else
+            $val = false;
+          break;
+        case 'int':
+//    if (!$tmp || !is_numeric($tmp) || !ctype_digit($tmp))
+//      throw new WAWASError('Error, maxconnections '.$tmp.' is not an integer.');
+//    $this->server['maxconnections'] = $tmp;
+//    if (ctype_digit($I) && $I >= $min && $I <= $max)
+//      return true;
+          break;
+        case 'mail':
+          break;
+        case 'ip':
+//    if (preg_match('/^[0-2]{0,1}[0-9]{1,2}.[0-2]{0,1}[0-9]{1,2}.[0-2]{0,1}[0-9]{1,2}.[0-2]{0,1}[0-9]{1,2}$/', $IP))
+//      return true;
+          break;
+        case 'port':
+//    if (ctype_digit($Port) && $Port >= 10 && $Port <= 65534)
+//      return true;
+          break;
+        case 'cont':
+          $val = null;
+          if (isset($config->$var))
+          {
+            $val = $this->parse($def['data'], $config->$var);
+          }
+          break;
+        case 'loop':
+          $val = null;
+          if (isset($config->$var))
+          {
+            foreach($config->$var as $v)
+            {
+              if (is_array($def['data']))
+                $val[] = $this->parse($def['data'], $v);
+              else
+                $val[] = sprintf($v);
+            }
+          }
+          break;
+      }
+      $result[$var] = $val;
+    }
+
+    return $result;
+  }
+
+  public function applydefault($cfg, $default)
+  {
+    foreach($default as $k => $v)
+    {
+      if (!isset($cfg[$k]))
+      {
+        $cfg[$k] = $v;
+      }
+      else
+      {
+        if (is_array($v))
+        {
+          if (!isset($v[0])) // is numeric array: it's a list of same values
+            $cfg[$k] = $this->applydefault($cfg[$k], $v);
+        }
+      }
+    }
+    return $cfg;
+  }
+
+  // =====================================================
+  // GETs
+  // =====================================================
+  public function getEntry($entry)
+  {
+    $xentry = explode('/', $entry);
+    $local = $this->data;
+    foreach($xentry as $anentry)
+    {
+      if (!isset($local[$anentry]))
+        throw new WAWASError('Error, entry '.$anentry.' does not exists into the config parameters.');
+      $local = $local[$anentry];
+    }
+    return $local;
+  }
+
+}
+
+?>

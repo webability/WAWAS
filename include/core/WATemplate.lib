@@ -1,0 +1,578 @@
+<?php
+
+/*
+    WATemplate.lib, DomCore, the WebAbility(r) Core System
+    Contains the basic class to compile an HTML/XML Template file to a PHP array/object
+    (c) 2008-2010 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box
+|------------------------------------------------------------------|
+| WATemplate: Template compiler                                    |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+| + ::compile($buffer: string): Array                              |
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+// class to compile and keep a Template string
+/* A template is:
+
+   %-- comments --%
+   xml/html code
+   %%SUBTEMPLATE(id)%%
+     xml/html code
+     %%SUBTEMPLATE(id)%%
+     xml/html code indented
+     %%ENDSUBTEMPLATE%%
+     xml/html code
+   %%ENDSUBTEMPLATE%%
+
+   Meta elements:
+   ??xx??   if/then/else
+   @@xx@@   loops
+   &&xx&&   references
+   !!xx!!   debug
+
+*/
+// Template keywords __XX__
+
+
+class WATemplate extends WAClass
+{
+  private $template = '';
+  private $metaelements = array();
+  private $subtemplates = array();
+
+  private $elements = array();
+
+  public function __construct($data)
+  {
+    parent::__construct();
+
+    if (is_string($data))
+    {
+      $this->compile($data);
+    }
+    else if (is_array($data))
+    {
+      if (isset($data['template']) && is_string($data['template']))
+        $this->template = $data['template'];
+      if (isset($data['metaelements']) && is_array($data['metaelements']))
+        $this->metaelements = $data['metaelements'];
+      if (isset($data['subtemplates']) && is_array($data['subtemplates']))
+        $this->subtemplates = $data['subtemplates'];
+    }
+  }
+
+  public function getTemplate($name = null)
+  {
+    if ($name === null)
+      return $this->template;
+    if (!isset($this->subtemplates[$name]))
+      return null;
+    if (is_string($this->subtemplates[$name]))
+      return $this->subtemplates[$this->subtemplates[$name]]->getClone();
+    return $this->subtemplates[$name]->getClone();
+  }
+
+  public function getTemplates()
+  {
+    return $this->subtemplates;
+  }
+
+
+  public function getClone()
+  {
+    $subt = array();
+    foreach($this->subtemplates as $id => $st)
+    {
+      if ($st instanceof WATemplate)
+        $subt[$id] = $st->getClone();
+      else
+        $subt[$id] = $st;
+    }
+    return new WATemplate(array('template' => $this->template, 'metaelements' => $this->metaelements, 'subtemplates' => $subt));
+  }
+
+  public function metaElements($elements, $reverse = false)
+  {
+    foreach($this->metaelements as $e)
+    {
+      $done = false;
+      $kval = $val = '';
+      if ($e[0] == '!') // it's a DEBUG ELEMENT
+      {
+        $kval = $e[1];
+        if ($e[2] == 'dump')
+        {
+          $tmp = $this->dumpelements($elements, 0, true);
+        }
+        if ($e[2] == 'list')
+        {
+          $tmp = $this->dumpelements($elements, 0, false);
+        }
+        $val = $tmp;
+      }
+      if ($e[0] == '&') // it's a SIMPLE SUBTEMPLATE
+      {
+        $kval = $e[1];
+        $entry = $e[2];
+        $id = $e[3];
+        $tmp = $this->getTemplate($id);
+        if ($tmp && isset($elements[$entry]))
+        {
+          $tmp->metaElements(array_merge($elements, is_array($elements[$entry])?$elements[$entry]:array()));
+        }
+        $val = $tmp;
+      }
+      if ($e[0] == '@') // it's a LOOP
+      {
+        $kval = $e[1];
+        $entry = $e[2];
+        $id = $e[3];
+        $check = isset($e[4])?$e[4]:null;
+        if (!isset($elements[$entry]) || !is_array($elements[$entry]) || sizeof($elements[$entry]) == 0)
+        {
+          $val = $this->getTemplate($id.'.none');
+        }
+        else
+        {
+          $alt = false;
+          foreach($elements[$entry] as $key => $values)
+          {
+            $tmp = $this->getTemplate($id.'.key.'.$key);
+            if (!$tmp && isset($values[$check]))
+              $tmp = $this->getTemplate($id.'.sel.'.$values[$check]);
+            if (!$tmp && $alt)
+              $tmp = $this->getTemplate($id.'.loopalt');
+            if (!$tmp)
+              $tmp = $this->getTemplate($id.'.loop');
+            if (!$tmp)
+              $tmp = $this->getTemplate($id);
+            if ($tmp)
+            {
+              $tmp->metaElements(array_merge($elements, is_array($values)?$values:array()));
+              if (!isset($this->elements[$kval]))
+                $this->elements[$kval] = array();
+              if ($reverse)
+                array_unshift($this->elements[$kval], $tmp);
+              else
+                $this->elements[$kval][] = $tmp;
+            }
+            $alt = !$alt;
+          }
+          $done = true;
+        }
+      }
+      elseif ($e[0] == '?') // it's a IF/CASE/NONE
+      {
+        $kval = $e[1];
+        $entry = $e[2];
+        $id = $e[3];
+        $checkvalue = isset($elements[$entry])?$elements[$entry]:null;
+        if (!$checkvalue)
+          $tmp = $this->getTemplate($id.'.none');
+        else
+        {
+          $tmp = $this->getTemplate($id.'.'.$checkvalue);
+          if (!$tmp)
+            $tmp = $this->getTemplate($id);
+        }
+        if ($tmp && isset($elements[$entry]))
+          $tmp->metaElements(array_merge($elements, is_array($elements[$entry])?$elements[$entry]:array()));
+        $val = $tmp;
+      }
+      if (!$done)
+      {
+        if (!isset($this->elements[$kval]))
+          $this->elements[$kval] = array();
+        if ($reverse)
+          array_unshift($this->elements[$kval], $val);
+        else
+          $this->elements[$kval][] = $val;
+      }
+    }
+
+    if (!$elements || !is_array($elements))
+      return;
+    foreach($elements as $k => $e)
+    {
+      if (is_array($e)) // we only want normal values. arrays and objects are interpreted in another way
+        continue;
+      if (!isset($this->elements[$k]))
+        $this->elements[$k] = array();
+      if ($reverse)
+        array_unshift($this->elements[$k], $e);
+      else
+        $this->elements[$k][] = $e;
+    }
+  }
+
+  public function addElement($element, $value, $reverse = false)
+  {
+    if (!$this->elements)
+      $this->elements = array();
+    if (!is_array($element))
+    {
+      $element = array($element);
+      $value = array($value);
+    }
+    foreach($element as $k => $e)
+    {
+      if (!isset($this->elements[$e]))
+        $this->elements[$e] = array();
+      if ($reverse)
+      {
+        if (is_array($value[$k]))
+          foreach($value[$k] as $v)
+            array_unshift($this->elements[$e], $v);
+        else
+          array_unshift($this->elements[$e], $value[$k]);
+      }
+      else
+      {
+        if (is_array($value[$k]))
+          foreach($value[$k] as $v)
+            $this->elements[$e][] = $v;
+        else
+          $this->elements[$e][] = $value[$k];
+      }
+    }
+  }
+
+  public function addElements($elements, $reverse = false)
+  {
+    $this->metaElements($elements, $reverse);
+  }
+
+  public function resolve()
+  {
+    $temp = $this->template;
+    // 1. parse the elements values
+    if (!$this->elements)
+      return $temp;
+    $elementstmp = array();
+    $elementstxt = array();
+
+    foreach ($this->elements as $k => $el)
+    {
+      $value1 = "";
+      $hastemplate = false;
+      foreach ($el as $k1 => $el1)
+      {
+        if ($el1 instanceof WATemplate)
+        {
+          $value1 .= $el1->resolve();
+          $hastemplate = true;
+        }
+        else
+          $value1 .= $el1;
+      }
+      if ($hastemplate)
+        $elementstmp[$k] = $value1;
+      else
+        $elementstxt[$k] = $value1;
+    }
+
+    // PASS 1: RESOLVE ALL SUB TEMPLATES
+    $regin = array();
+    $regout = array();
+    foreach ($elementstmp as $k => $v)
+    {
+      $k = str_replace("?", "\\?", $k);
+      $regin[] = "/".$k."/s";
+      $out = str_replace("\\", "\\\\", $v);
+      $out = str_replace("$", "\\$", $out);
+      $regout[] = $out;
+    }
+    $temp = preg_replace($regin, $regout, $temp);
+
+    // PASS 2: REPLACE ALL TEXT
+    $regin = array();
+    $regout = array();
+    foreach ($elementstxt as $k => $v)
+    {
+      $k = str_replace("?", "\\?", $k);
+      $regin[] = "/".$k."/s";
+      $out = str_replace("\\", "\\\\", $v);
+      $out = str_replace("$", "\\$", $out);
+      $regout[] = $out;
+    }
+    $temp = preg_replace($regin, $regout, $temp);
+    return $temp;
+  }
+
+
+  // ===================== PRIVATE COMPILER ==============================
+  // meta element !! to dump the variables
+  private function dumpelements($elements, $level, $value = false)
+  {
+    $txt = '';
+    if (is_array($elements))
+    {
+      foreach($elements as $k => $v)
+      {
+        $txt .= str_repeat('&nbsp;&nbsp;', $level) . substr($k, 0, 1).'<span></span>'.substr($k, 1);
+        if ($value)
+        {
+          $txt .= ' :: ';
+          if (is_array($v))
+          {
+            $txt .= "<br />";
+            $txt .= $this->dumpelements($v, $level + 1, $value);
+          }
+          else if (is_object($v))
+            $txt .= "{Object}<br />";
+          else
+            $txt .= "$v<br />";
+        }
+        else
+        {
+          $txt .= "<br />";
+          if (is_array($v))
+            $txt .= $this->dumpelements($v, $level + 1, $value);
+        }
+      }
+    }
+    return $txt;
+  }
+
+
+  // ===================== PRIVATE COMPILER ==============================
+  // 8 a-z random key
+  private function createkey()
+  {
+    srand((double)microtime()*1000000);
+    $key = '';
+    for ($i=0;$i<8;$i++)
+      $key .= chr(65+rand()%26);
+    return $key;
+  }
+
+  private function compile($data, $interprete = true)
+  {
+    if ($interprete)
+    {
+      $data = rawurlencode($data);
+      // ------------------------
+      // First remove all the comments
+      $elem = array();
+
+      $regelement = '/%25--(.*?)--%25'.
+                    '/s';
+      preg_match_all($regelement, $data, $resultelement);
+      if (!empty($resultelement[0]))
+      {
+        reset($resultelement);
+        while (list($k, $E) = each($resultelement[0]))
+        {
+          // we ignore the comments
+          $pos = strpos($data, $E);
+          $data = substr_replace($data, '', $pos, strlen($E));
+        }
+      }
+
+      // Generate a unique key for our template
+      $badkey = '1';
+      while ($badkey)
+      {
+        $ID = $this->createkey();
+        // check that key IS NOT INCLUDED into the template to avoid duplicate problems
+        $badkey = strstr($data, $ID);
+      }
+
+      // Parse the sub templates
+      $reg = '/%25%25(SUBTEMPLATE)%28(.*?)%29%25%25(%0D){0,1}(%0A){0,1}(.*?)%25%25ENDSUBTEMPLATE%25%25(%0D){0,1}(%0A){0,1}/s';
+      $regin = '/%25%25(SUBTEMPLATE)%28(.*?)%29%25%25(%0D){0,1}(%0A){0,1}(.*?)$/s';
+
+      $loop = true;
+      $subt = array();
+      $itemnumber = 1;
+      while($loop)
+      {
+        unset($result);
+        preg_match_all($reg, $data, $result);
+        if(!empty($result[0]))
+        {
+          while(list($k, $E) = each($result[0]))
+          {
+            $resultin = $result[5][$k];
+            $resultout = $result[0][$k];
+            $resulttemp = $result[2][$k];
+            $loopin = true;
+            while ($loopin)
+            {
+              unset($subresult);
+              preg_match($regin, $resultin, $subresult);
+              if (!empty($subresult[0]))
+              { // there are nested %%SUTEMP
+                $resultin = $subresult[5];
+                $resultout = $subresult[0];
+                $resulttemp = $subresult[2];
+              }
+              else
+                $loopin = false;
+            }
+            if($result[5][$k] != $resultin)
+            {
+              $resultout .= '%25%25ENDSUBTEMPLATE%25%25';
+            }
+            $pos = strpos($data, $resultout);
+            $data = substr_replace($data, '___'.$ID.$itemnumber.'___', $pos, strlen($resultout));
+
+            $subt[$itemnumber++] = array(rawurldecode($resulttemp), rawurldecode($resultin));
+          }
+        }
+        else
+          $loop = false;
+      }
+      $data = rawurldecode($data);
+
+      $tmp = $this->separateSubTemplate($data, $itemnumber, $ID, $subt);
+      $this->template = $tmp['template'];
+      $this->subtemplates = $tmp['subtemplates'];
+      $this->metaelements = $this->getMetaElements($tmp['template']);
+    }
+    else
+    {
+      $this->template = $data;
+      $this->subtemplates = array();
+      $this->metaelements = $this->getMetaElements($data);
+    }
+  }
+
+  private function separateSubTemplate($text, $itemnumber, $ID, $calcsubtemplates)
+  {
+    $subtemplates = array();
+    for ($i = 1; $i < $itemnumber; $i++)
+    {
+      if (strstr($text, '___'.$ID.$i.'___'))
+      {
+        // 1. Search of subtemplates of this one
+        $subt = $this->separateSubTemplate($calcsubtemplates[$i][1], $itemnumber, $ID, $calcsubtemplates);
+        // 2. replace text
+        $pos = strpos($text, '___'.$ID.$i.'___');
+        $text = substr_replace($text, '', $pos, strlen('___'.$ID.$i.'___'));
+        // 3. create Template object
+        if (strpos($calcsubtemplates[$i][0], '|') !== false) // various subtemplates in the ID
+        {
+          $ids = explode('|', $calcsubtemplates[$i][0]);
+          $firstid = null;
+          foreach($ids as $id)
+          {
+            if (trim($id) == '')
+              continue;
+            if (!$firstid)
+            {
+              $firstid = $id;
+              $subtemplates[$id] = new WATemplate($subt);
+            }
+            else
+            {
+              $subtemplates[$id] = $firstid;
+            }
+          }
+        }
+        else
+          $subtemplates[$calcsubtemplates[$i][0]] = new WATemplate($subt);
+      }
+    }
+    $template = array(
+      'template' => $text,
+      'subtemplates' => $subtemplates,
+      'metaelements' => $this->getMetaElements($text)
+    );
+    return $template;
+  }
+
+  private function getMetaElements($data)
+  {
+    $data = rawurlencode($data);
+    // separate meta elements
+    $regelement = '/'.
+                  '%3F(%3F)(.*?)%3F%3F|'.     // meta element ??xx??
+                  '%40(%40)(.*?)%40%40|'.     // meta element @@xx@@
+                  '%26(%26)(.*?)%26%26|'.     // meta element &&xx&&
+                  '%21(%21)(.*?)%21%21|'.     // meta element !!xx!! debug
+                  '/s';
+    preg_match_all($regelement, $data, $resultelement);
+
+    $metaelements = array();
+    if (!empty($resultelement[0]))
+    {
+      reset($resultelement);
+      while (list($k, $E) = each($resultelement[0]))
+      {
+        if ($resultelement[2][$k])
+        {
+          $xme = explode(':', rawurldecode($resultelement[2][$k]));
+          if (!isset($xme[1]))
+            $xme[1] = $xme[0];
+          $metaelements[] = array(rawurldecode($resultelement[1][$k]), rawurldecode($resultelement[0][$k]), $xme[0], $xme[1]);
+        }
+        elseif ($resultelement[4][$k])
+        {
+          $xme = explode(':', rawurldecode($resultelement[4][$k]));
+          if (!isset($xme[1]))
+            $xme[1] = $xme[0];
+          if (!isset($xme[2]))
+            $xme[2] = null;
+          $metaelements[] = array(rawurldecode($resultelement[3][$k]), rawurldecode($resultelement[0][$k]), $xme[0], $xme[1], $xme[2]);
+        }
+        elseif ($resultelement[6][$k])
+        {
+          $xme = explode(':', rawurldecode($resultelement[6][$k]));
+          if (!isset($xme[1]))
+            $xme[1] = $xme[0];
+          if (!isset($xme[2]))
+            $xme[2] = null;
+          $metaelements[] = array(rawurldecode($resultelement[5][$k]), rawurldecode($resultelement[0][$k]), $xme[0], $xme[1], $xme[2]);
+        }
+        elseif ($resultelement[8][$k])
+        {
+          $xme = rawurldecode($resultelement[8][$k]);
+          $metaelements[] = array(rawurldecode($resultelement[7][$k]), rawurldecode($resultelement[0][$k]), $xme);
+        }
+      }
+    }
+    return $metaelements;
+  }
+
+  protected function serial(&$data)
+  {
+    $data['template'] = $this->template;
+    $data['metaelements'] = $this->metaelements;
+    $data['subtemplates'] = $this->subtemplates;
+  }
+
+  protected function unserial($data)
+  {
+    $this->template = $data['template'];
+    $this->metaelements = $data['metaelements'];
+    $this->subtemplates = $data['subtemplates'];
+  }
+
+  public function __toString()
+  {
+    return $this->resolve();
+  }
+
+}
+
+?>

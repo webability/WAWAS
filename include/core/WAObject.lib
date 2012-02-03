@@ -1,0 +1,81 @@
+<?php
+
+/*
+    WAObject.lib, DomCore, the WebAbility(r) Core System
+    Contains the basic object to give variables security to all classes
+    (c) 2008-2010 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box
+|------------------------------------------------------------------|
+| WAObject : DomCore Basic Object                                  |
+|------------------------------------------------------------------|
+| # ::$ibase: Base singleton                                       |
+| # $base: Base singleton                                          |
+|------------------------------------------------------------------|
+| + new WAObject()                                                 |
+| + ::setBase($base: Base)                                         |
+| // Magic functions:                                              |
+| + __get($name: string) : string                                  |
+| + __set($name: string, $val: any)                                |
+| + __call($name: string, $vars: any)                              |
+| + explain($indent: integer): string                              |
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+
+class WAObject extends WADebug
+{
+  protected static $ibase = null;
+  protected $base = null;
+
+  public function __construct()
+  {
+    parent::__construct();
+    $this->base = self::$ibase;
+  }
+
+  public static function setBase($base)
+  {
+    self::$ibase = $base;
+  }
+
+  public function __get($name)
+  {
+    throw new CoreError(WAMessage::getMessage('WAObject.badget').get_class($this).'.'.$name);
+  }
+
+  public function __set($name, $val)
+  {
+    throw new CoreError(WAMessage::getMessage('WAObject.badset').get_class($this).'.'.$name);
+  }
+
+  public function __call($name, $vars)
+  {
+    throw new CoreError(WAMessage::getMessage('WAObject.badcall').get_class($this).'.'.$name.'()');
+  }
+
+  // DEBUG FUNCTIONS
+  public function explain($indent = 0)
+  {
+    return parent::explain($indent, array('base', 'ibase'));
+  }
+
+}
+
+?>

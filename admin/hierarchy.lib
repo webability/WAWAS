@@ -1,0 +1,52 @@
+<?php
+
+class hierarchy extends WAObject
+{
+  private $admin;
+  private $request;
+  private $response;
+
+  public function __construct($admin)
+  {
+    parent::__construct();
+
+    $this->admin = $admin;
+  }
+
+  public function main($request, $response)
+  {
+    $this->request = $request;
+    $this->response = $response;
+
+    $data = array();
+    $listeners = $this->base->server->getListeners();
+    foreach($listeners as $listener)
+    {
+      $clients = $listener->getClients();
+      $cdata = array();
+      foreach($clients as $client)
+      {
+        $cdata[] = array('{name}' => 'client',
+          '{ip}' => $client->getClientIP(),
+          '{port}' => $client->getClientPort()
+         );
+      }
+
+      $data['listener'][] = array('{name}' => $listener->getName(),
+          '{ip}' => $listener->getIP(),
+          '{port}' => $listener->getPort(),
+          'client' => $cdata
+         );
+
+
+
+    }
+
+    $template = new WATemplate(file_get_contents('admin/hierarchy.template'));
+    $template->metaElements($data);
+
+    return $template->resolve();
+  }
+}
+
+?>

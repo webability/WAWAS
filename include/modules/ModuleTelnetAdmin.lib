@@ -1,0 +1,147 @@
+<?php
+
+class ModuleTelnetAdmin extends Module
+{
+  private $users = array();
+  private $def = array(
+    'adminfile' => array('type' => 'file', 'mandatory' => false, 'default' => 'conf/admin.conf'),
+     );
+
+  private $type;
+
+  // stats for Server or Standalone
+  private $statstime = 0;
+  private $statsticks = array();    // ticks per second. 1000 optimum
+  private $statsclients = array();  // clients per second
+  private $statsqueue = array();    // queue messages per second
+
+  function __construct($name)
+  {
+    parent::__construct($name);
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("Admin->__construct()", WADebug::SYSTEM);
+
+    $this->base->config->addDef('server', $this->def);
+  }
+
+  public function start($protocol)
+  {
+    // load icons
+    $adminfile = $this->base->config->getEntry('server/adminfile');
+    if (!is_file($adminfile))
+      throw new WAWASError("Error, the admin config file does not exist: ".$adminfile);
+    $users = file($adminfile);
+    foreach($users as $user)
+    {
+      if (!trim($user))
+        continue;
+      if (substr(trim($user), 0, 1) == '#')
+        continue;
+      $xu = explode(',', trim($user));
+      if (sizeof($xu) == 2)
+        $this->users[$xu[0]] = $xu[1];
+    }
+
+    // Register hook to process requests
+    $protocol->registerHook('init', $this->name, "init");
+    $protocol->registerHook('loop', $this->name, "loop");
+    $protocol->registerHook('data', $this->name, "receivedata");
+    $protocol->registerHook('process', $this->name, "process");
+  }
+
+  public function init($type)
+  {
+    // type of server to know how to display info
+    $this->type = $type;
+  }
+
+  public function loop()
+  {
+    // stats on velocity
+    $statstime = time();
+    if (!isset($this->statsticks[$statstime]))
+      $this->statsticks[$statstime] = 0;
+    $this->statsticks[$statstime]++;
+    while (sizeof($this->statsticks) > 3600) // we keep only 1 hour in memory
+      array_shift($this->statsticks);
+  }
+
+  public function data($client, $data)
+  {
+
+  }
+
+  public function process($request, $response)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ModuleAdmin->process($vhost, $request, $response)", WADebug::SYSTEM);
+
+    if (!$this->auth($request, $response))
+      return;
+
+    $message = $this->getControlPanel($request, $response);
+
+    $response->content = true;
+    $response->setBody($message);
+
+    $response->setHeader('Content-Type', 'text/html');
+    $response->setHeader('Date', date ("r", time()));
+    $response->setHeader('Content-Length', $response->getBodyLength());
+
+  }
+
+  private function auth($request, $response)
+  {
+    $auth = $request->getHeader('authorization');
+    $xauth = explode(' ', $auth);
+    $signed = false;
+    if ($xauth[0] == 'Basic')
+    {
+      $chain = base64_decode($xauth[1]);
+      $xchain = explode(':', $chain);
+      if (isset($this->users[$xchain[0]]) && $this->users[$xchain[0]] == $xchain[1])
+      {
+        $signed = true;
+      }
+    }
+
+    if (!$signed)
+    {
+      $message = "Please Authenticate";
+
+      $response->content = true;
+      $response->setBody($message);
+
+      $response->setResponse(401, 'Please Authenticate');
+      $response->setHeader("WWW-Authenticate", "Basic realm=\"WebAbility(r) Web and Application Server Control Panel\"");
+      $response->setHeader('Date', date ("r", time()));
+      $response->setHeader('Content-Length', $response->getBodyLength());
+      return false;
+    }
+    return true;
+  }
+
+
+  function getControlPanel($request, $response)
+  {
+    $order = $request->getGet('order');
+    switch($order)
+    {
+      case 'hierarchy':
+        $result = include_once('admin/hierarchy.lib');
+        $hierarchy = new hierarchy($this);
+        $result = $hierarchy->main($request, $response);
+        break;
+      default:
+        $result = include_once('admin/index.lib');
+        $index = new index($this);
+        $result = $index->main($request, $response);
+        break;
+    }
+
+    return $result;
+  }
+
+}
+
+?>

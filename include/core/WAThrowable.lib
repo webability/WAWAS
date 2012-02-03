@@ -1,0 +1,75 @@
+<?php
+
+/*
+    WAThrowable.lib, DomCore, the WebAbility(r) Core System
+    Contains the basic class to throw any error or exception
+    (c) 2008-2010 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box
+|------------------------------------------------------------------|
+| WAThrowable: Error and exception base class.                     |
+|------------------------------------------------------------------|
+| - $trace: string                                                 |
+| + $message: string                                               |
+|------------------------------------------------------------------|
+| + new Throwable($message: string)                                |
+| + __toString(): string                                           |
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+
+class WAThrowable extends Exception
+{
+  private $trace = null;
+  public $message = null;
+
+  function __construct($message = null)
+  {
+    $this->message = $message;
+    $this->trace = debug_backtrace();
+  }
+
+  public function __toString()
+  {
+    if (WADebug::getHTMLAPI())
+    {
+      $error = <<<EOF
+<table border="1"><tr><td bgcolor="#fdd"><b>ERROR: </b></td><td bgcolor="#fdd">$this->message</td></tr>
+<tr><td><b>THROWN: </b></td><td>$this->file (<b>$this->line</b>)</td></tr>
+<tr><td valign="top"><b>TRACE: </b></td><td valign="top">
+EOF;
+      foreach($this->trace as $k => $t)
+      {
+        if ($k) // we dont write 1rst errror since it is where we threw the object
+          $error .= (isset($t['file'])?$t['file']:'No file').' (<b>'.(isset($t['line'])?$t['line']:'No line').'</b>) :: calling <font color="blue">'.(isset($t['class'])?$t['class']:'').(isset($t['type'])?$t['type']:'').(isset($t['function'])?$t['function']:'No function').'</font><br />'.PHP_EOL;
+      }
+      $error .= '</td></tr>'.PHP_EOL.'</table>';
+      return $error;
+    }
+    $error = "ERROR: $this->message".PHP_EOL."THROWN: $this->file ($this->line)".PHP_EOL."TRACE:".PHP_EOL;
+    foreach($this->trace as $k => $t)
+    {
+      if ($k) // we dont write 1rst errror since it is where we threw the object
+        $error .= (isset($t['file'])?$t['file']:'No file').' ('.(isset($t['line'])?$t['line']:'No line').') :: calling '.(isset($t['class'])?$t['class']:'').(isset($t['type'])?$t['type']:'').(isset($t['function'])?$t['function']:'No function').PHP_EOL;
+    }
+    return $error;
+  }
+}
+
+?>

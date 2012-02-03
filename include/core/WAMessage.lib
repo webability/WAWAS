@@ -1,0 +1,102 @@
+<?php
+
+/*
+    WAMessage.lib, DomCore, the WebAbility(r) Core System
+    Contains the static system messages
+    (c) 2008-2010 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box
+|------------------------------------------------------------------|
+| WAMessage: DomCore Static Messages                               |
+|------------------------------------------------------------------|
+| - ::messagesfile: string                                         |
+| - ::messagesloaded: boolean                                      |
+| - ::messages: Array(string)                                      |
+|------------------------------------------------------------------|
+| + ::addMessages($messages: array(string) )                       |
+| + ::setMessagesFile($file: string file path)                     |
+| + ::getMessage($id: string) : string                             |
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+class WAMessage
+{
+  // directory to search for the static messages
+  private static $messagesfile = null;
+  private static $messagesloaded = true;
+  private static $messages = array(
+    'WAMessage.notfound' => 'Error: The message was not found for the ID: ',
+    'WAObject.badget' => 'Error: the attribute to read does not exist: ',
+    'WAObject.badset' => 'Error: the attribute to write does not exist: ',
+    'WAObject.badcall' => 'Error: the called method does not exist: ',
+    'WAClass.serial' => 'Error: you must declare your own serial() method',
+    'WAClass.unserial' => 'Error: you must declare your own unserial() method',
+    'WAFile.mkdirproblem' => 'Error: the directory could not be created: ',
+    'WAFile.unknownfile' => 'Error: the file is not recognized: ',
+    'WAFile.baddir' => 'Error: the path to delete recursively is not compliant to be deleted: '
+    );
+
+  // adds messages for an external static class
+  public static function addMessages($messages)
+  {
+    foreach($messages as $k => $m)
+    {
+      self::$messages[$k] = $m;
+    }
+  }
+
+  // Sets the language messages file at the beginning of the application
+  // If there is a need, the file will be loaded
+  public static function setMessagesFile($file)
+  {
+    self::$messagesloaded = false;
+    self::$messagesfile = $file;
+  }
+
+  // Get a message entry. If needed the file will be loaded
+  public static function getMessage($id)
+  {
+    if (!self::$messagesloaded)
+    {
+      // we read the static directory and load the language
+      $size = @filesize(self::$messagesfile);
+      if ($size)
+      {
+        $fp = fopen(self::$messagesfile, 'rb');
+        $data = fread($fp, $size);
+        fclose($fp);
+        $msg = WALanguage::compile($data);
+
+        if ($msg && is_array($msg))
+        {
+          foreach(self::$messages as $k => $m)
+            if (isset($msg[$k]))
+              self::$messages[$k] = $msg[$k];
+        }
+      }
+      self::$messagesloaded = true;
+    }
+    if (isset(self::$messages[$id]))
+      return self::$messages[$id];
+    return self::$messages['WAMessage.notfound'].$id;
+  }
+
+}
+
+?>

@@ -1,0 +1,68 @@
+<?php
+
+class ModulePHP extends Module
+{
+  private $def = array(
+    'phpextension' => array('type' => 'loop', 'mandatory' => true, 'data' => 'str')
+   );
+
+  function __construct($name)
+  {
+    parent::__construct($name);
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ModulePHP->__construct()", WADebug::SYSTEM);
+
+    $this->base->config->addDef('virtualhosts/default', $this->def);
+    $this->base->config->addDef('virtualhosts/virtualhost', $this->def);
+  }
+
+  public function start($protocol)
+  {
+
+    // Register hook to process requests
+    $protocol->registerHook('process', $this->name, "process");
+  }
+
+  public function process($OV, $request, $response)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ModulePHP->process($OV, $request, $response)", WADebug::SYSTEM);
+
+    if ($response->content)
+      return;
+
+    $phpexts = $OV->getEntry('phpextension');
+    $ext = $request->getRequest('ext');
+    $accept = false;
+    foreach($phpexts as $phpext)
+    {
+      if ($phpext == $ext)
+      {
+        $accept = true;
+        break;
+      }
+    }
+    if (!$accept)
+      return;
+
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("ModulePHP: request accepted", WADebug::SYSTEM);
+
+    $script = $OV->getDocumentRoot() . $request->getRequest('path');
+
+    // Do we fork ? (for security, yes)
+
+    // execute the script
+
+    ob_start();
+    require $script;
+    $data = ob_get_contents();
+    ob_end_clean();
+
+    $response->content = true;
+    $response->setBody($data);
+    $response->setHeader('Content-Length', $response->getBodyLength());
+  }
+}
+
+?>
