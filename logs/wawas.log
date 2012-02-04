@@ -1,0 +1,32 @@
+X-Powered-By: PHP/5.3.8
+Content-type: text/html
+
+WAWAS Daemon running in background, PID = 15056
+X-Powered-By: PHP/5.3.8
+Content-type: text/html
+
+<br />
+<b>Warning</b>:  socket_bind() [<a href='function.socket-bind'>function.socket-bind</a>]: unable to bind address [98]: Address already in use in <b>/home/sites/wawas/include/server/Listener.lib</b> on line <b>56</b><br />
+===== E:2012-02-04 00:34:47: Could not bind socket in openListener with 127.0.0.1:81
+X-Powered-By: PHP/5.3.8
+Content-type: text/html
+
+===== M:2012-02-04 00:37:42: Socket opened and listening: 127.0.0.1:81
+===== M:2012-02-04 00:37:42: Socket opened and listening: 50.23.147.2:81
+===== M:2012-02-04 00:37:42: Socket opened and listening: 50.22.171.108:81
+===== M:2012-02-04 00:37:42: Socket opened and listening: 50.23.147.2:82
+===== M:2012-02-04 00:37:42: Socket opened and listening: 50.23.147.2:83
+===== M:2012-02-04 00:37:42: Socket opened and listening: 50.23.147.2:84
+===== M:2012-02-04 00:37:42: Starting forked Workers
+X-Powered-By: PHP/5.3.8
+Content-type: text/html
+
+WAWAS Daemon running in background, PID = 15301
+WAWAS Daemon running in background, PID = 15547
+===== M:2012-02-04 00:41:34: Socket opened and listening: 127.0.0.1:81
+===== M:2012-02-04 00:41:34: Socket opened and listening: 50.23.147.2:81
+===== M:2012-02-04 00:41:34: Socket opened and listening: 50.22.171.108:81
+===== M:2012-02-04 00:41:34: Socket opened and listening: 50.23.147.2:82
+===== M:2012-02-04 00:41:34: Socket opened and listening: 50.23.147.2:83
+===== M:2012-02-04 00:41:34: Socket opened and listening: 50.23.147.2:84
+===== M:2012-02-04 00:41:34: Starting forked Workers

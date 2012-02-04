@@ -160,7 +160,7 @@ final class ProtocolHTTP11 extends Protocol
           if (strlen($request->rawheaders) > $maxheadersize)
           {
             $response->setReponse(401, 'Error: the received header is too large.');
-            throw WAWASError('');
+            throw new WAWASError('');
           }
 
           // parse the headers, get in the package the VHOST
@@ -342,7 +342,7 @@ final class ProtocolHTTP11 extends Protocol
     if (sizeof($lineheaders) > $maxheaders)
     {
       $response->setReponse(401, 'Error: there are too much header lines.');
-      throw WAWASError('');
+      throw new WAWASError('');
     }
 
     $item = 0;
@@ -360,7 +360,7 @@ final class ProtocolHTTP11 extends Protocol
         if ($http['protocol']!='HTTP' || ($http['version']!='1.0' && $http['version']!='1.1'))
         {
           $response->setReponse(401, 'Error: unkown or malformed protocol.');
-          throw WAWASError('');
+          throw new WAWASError('');
         }
         else
         {
@@ -393,13 +393,13 @@ final class ProtocolHTTP11 extends Protocol
     if (!$host)
     {
       $response->setResponse(400, 'Missing HOST in header');
-      throw WAWASError('');
+      throw new WAWASError('');
     }
 
     if (!isset($this->hostnames[$host]))
     {
       $response->setResponse(501, "No host match =$host=");
-      throw WAWASError('');
+      throw new WAWASError('');
     }
 
     $vhost = $this->hostnames[$host];
@@ -410,7 +410,7 @@ final class ProtocolHTTP11 extends Protocol
     {
       // bad host in bad listener, so the host "does not exists"
       $response->setResponse(501, "No host match =$host=");
-      throw WAWASError('');
+      throw new WAWASError('');
     }
     $request->vhost = $vhost;
 
@@ -473,7 +473,7 @@ final class ProtocolHTTP11 extends Protocol
       if (sizeof($vars) > $maxgets)
       {
         $response->setResponse(401, "Too much GET variables.");
-        throw WAWASError('');
+        throw new WAWASError('');
       }
       foreach ($vars as $var)
       {
@@ -495,7 +495,7 @@ final class ProtocolHTTP11 extends Protocol
     if (sizeof($xc) > $maxcookies)
     {
       $response->setResponse(401, "Too much COOKIES in header.");
-      throw WAWASError('');
+      throw new WAWASError('');
     }
     foreach($xc as $c)
     {

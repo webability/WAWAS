@@ -7,7 +7,7 @@ class ModuleRedirect extends Module
   {
     parent::__construct($name);
     if (self::$debug || $this->localdebug)
-      $this->doDebug("Admin->__construct($adminfile)", WADebug::SYSTEM);
+      $this->doDebug("Admin->__construct($name)", WADebug::SYSTEM);
   }
 
 }
