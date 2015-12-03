@@ -1,0 +1,11 @@
+<?php
+
+namespace server;
+
+// A context is only a local thread container
+
+class Context
+{
+}
+
+?>

@@ -1,0 +1,67 @@
+<?php
+
+/* @DESCR -- Do not edit
+
+XBCompiler.lib, Xamboo
+Contains the basic static function to compile definition files and others
+(c) 2015 Philippe Thomassigny
+
+This file is part of Xamboo
+
+Xamboo is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Xamboo is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Xamboo.  If not, see <http://www.gnu.org/licenses/>.
+
+Creation: 2015-04-21
+Changes:
+
+@End_DESCR */
+
+/* @UML_Box
+|------------------------------------------------------------------|
+| XBCompiler:                                                      |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace xamboo;
+
+class XBCompiler
+{
+  public static function compileLines($text)
+  {
+    $text = str_replace(array("\n\r", "\r\n", "\r"), "\n", $text);
+    $xtext = explode("\n", $text);
+    $lines = array();
+    foreach($xtext as $line)
+    {
+      $line = trim($line);
+      if (!$line || substr($line, 0, 1) == '#')
+        continue;
+      $xline = explode("=", $line);
+      if (!isset($lines[$xline[0]]))
+        $lines[$xline[0]] = (isset($xline[1])?$xline[1]:'');
+      else
+      {
+        if (!is_array($lines[$xline[0]]))
+          $lines[$xline[0]] = array($lines[$xline[0]], (isset($xline[1])?$xline[1]:''));
+        else
+          $lines[$xline[0]][] = (isset($xline[1])?$xline[1]:'');
+      }
+    }
+    return $lines;
+  }
+
+}
+
+?>

@@ -1,146 +1,207 @@
 <?php
 
+namespace modules;
+
 class ModuleAdmin extends Module
 {
-  private $users = array();
-  private $def = array(
-    'adminfile' => array('type' => 'file', 'mandatory' => false, 'default' => 'conf/admin.conf'),
-     );
+  private $shmid;
+  private $shmsize;
+  private static $shm;
+  private static $sem;
+  
+  // Admin stock the data into SHM
 
-  private $type;
-
-  // stats for Server or Standalone
-  private $statstime = 0;
-  private $statsticks = array();    // ticks per second. 1000 optimum
-  private $statsclients = array();  // clients per second
-  private $statsqueue = array();    // queue messages per second
-
-  function __construct($name)
+  function __construct($config)
   {
-    parent::__construct($name);
-    if (self::$debug || $this->localdebug)
-      $this->doDebug("Admin->__construct()", WADebug::SYSTEM);
+    parent::__construct($config);
+    
+    $this->shmid = $config->admin->shmid;
+    $this->shmsize = $config->admin->shmsize; // size should be proportional to maxthreads and max hits per thread
 
-    $this->base->config->addDef('server', $this->def);
+    // clean the shared memory
+    $this->flush();
+  }
+  
+  // The init method called once at the beginning of the server
+  public function init($modules, $protocols, $listeners) 
+  {
+    $data = array();
+    // crea el shared segment 0, con los datos basicos
+    foreach($modules as $module)
+      $data['modules'][] = $module->name;
+    foreach($protocols as $protocol)
+      $data['protocols'][] = $protocol->name;
+    foreach($listeners as $listener)
+      $data['listeners'][] = $listener->name;
+    
+    $this->write(0, $data);
+    $this->write(1, array());
+  }
+  
+  // The loop method is informative only for the module called each loop
+  public function loop($counter)
+  {
+    $data = $this->read(0);
+    $data['counter'] = $counter;
+    $this->write(0, $data);
+  }
+  
+  public function start($context)
+  {
+    $threadid = $context->threadid;
+
+    $data = $this->read(1);
+    if (!isset($data[$threadid]))
+      $data[$threadid] = true;
+    $this->write(1, $data);
   }
 
-  public function start($protocol)
+  public function receivedata($context, $input)
   {
-    // load icons
-    $adminfile = $this->base->config->getEntry('server/adminfile');
-    if (!is_file($adminfile))
-      throw new WAWASError("Error, the admin config file does not exist: ".$adminfile);
-    $users = file($adminfile);
-    foreach($users as $user)
+    $threadid = $context->threadid;
+
+    $data = $this->read($threadid);
+    if (!$data)
     {
-      if (!trim($user))
-        continue;
-      if (substr(trim($user), 0, 1) == '#')
-        continue;
-      $xu = explode(',', trim($user));
-      if (sizeof($xu) == 2)
-        $this->users[$xu[0]] = $xu[1];
+      $data = array('input' => 0, 'output' => 0);
+   }
+    $data['input'] += strlen($input);
+    $this->write($threadid, $data);
+  }
+
+  public function senddata($context, $output)
+  {
+    $threadid = $context->threadid;
+    $data = $this->read($threadid);
+    $data['output'] += strlen($output);
+    $this->write($threadid, $data);
+  }
+
+  public function process($context) // $host, $request, $response)
+  {
+    $this->hits++;
+
+    // Cantidad de threads
+    // Memoria usada
+    // reload en 1 sec
+    // historico alguno ?
+
+    $loaded = $this->read(0);
+    $loadedtext = print_r($loaded, true);
+
+    $threads = $this->read(1);
+    $threadstext = print_r($threads, true);
+    
+    $txt = '';
+    foreach($threads as $id => $th)
+    {
+      $thdata = $this->read($id);
+      $txt .= $id . " :: " . print_r($thdata, true);
     }
 
-    // Register hook to process requests
-    $protocol->registerHook('init', $this->name, "init");
-    $protocol->registerHook('loop', $this->name, "loop");
-    $protocol->registerHook('data', $this->name, "receivedata");
-    $protocol->registerHook('process', $this->name, "process");
-  }
-
-  public function init($type)
-  {
-    // type of server to know how to display info
-    $this->type = $type;
-  }
-
-  public function loop()
-  {
-    // stats on velocity
-    $statstime = time();
-    if (!isset($this->statsticks[$statstime]))
-      $this->statsticks[$statstime] = 0;
-    $this->statsticks[$statstime]++;
-    while (sizeof($this->statsticks) > 3600) // we keep only 1 hour in memory
-      array_shift($this->statsticks);
-  }
-
-  public function data($client, $data)
-  {
-
-  }
-
-  public function process($request, $response)
-  {
-    if (self::$debug || $this->localdebug)
-      $this->doDebug("ModuleAdmin->process($request, $response)", WADebug::SYSTEM);
-
-    if (!$this->auth($request, $response))
-      return;
-
-    $message = $this->getControlPanel($request, $response);
-
-    $response->content = true;
-    $response->setBody($message);
-
-    $response->setHeader('Content-Type', 'text/html');
-    $response->setHeader('Date', date ("r", time()));
-    $response->setHeader('Content-Length', $response->getBodyLength());
-
-  }
-
-  private function auth($request, $response)
-  {
-    $auth = $request->getHeader('authorization');
-    $xauth = explode(' ', $auth);
-    $signed = false;
-    if ($xauth[0] == 'Basic')
+    foreach($context->modules as $mod => $mdata)
     {
-      $chain = base64_decode($xauth[1]);
-      $xchain = explode(':', $chain);
-      if (isset($this->users[$xchain[0]]) && $this->users[$xchain[0]] == $xchain[1])
-      {
-        $signed = true;
-      }
+      $txt .= $mod . " :: " . $mdata->hits . '<br />';
     }
+    
+    
+    
+    $data = <<<EOF
+<html>
+  <head>
+    <title>Stats Admin Server</title>
+    <meta http-equiv="refresh" content="5">
+  </head>
+  <body>
+  Counter: {$loaded['counter']}
+  <table border="1"><tr><td style="vertical-align: top;">
+  <pre>
+Loaded: <b>{$loadedtext}</b><br />
+</pre>
+   </td><td style="vertical-align: top;">
+   <pre>
+Threads: <b>{$threadstext}</b><br />
+</pre>
+   </td><td style="vertical-align: top;">
+   <pre>
+   {$txt}
+   </pre>
+   </td></tr>
+   </table>
+<br />
+  </body>
+</html>    
+EOF;
 
-    if (!$signed)
-    {
-      $message = "Please Authenticate";
-
-      $response->content = true;
-      $response->setBody($message);
-
-      $response->setResponse(401, 'Please Authenticate');
-      $response->setHeader("WWW-Authenticate", "Basic realm=\"WebAbility(r) Web and Application Server Control Panel\"");
-      $response->setHeader('Date', date ("r", time()));
-      $response->setHeader('Content-Length', $response->getBodyLength());
-      return false;
-    }
+    $context->response->body = nl2br($data);
+    $context->response->setHeader('Date', date ("r", time()));
+    $context->response->setHeader('Content-Length', strlen($context->response->body));
+    
+    $context->response->setHeader('Content-Type', 'text/html');
     return true;
   }
-
-
-  function getControlPanel($request, $response)
+  
+  public function stop($context)
   {
-    $order = $request->getGet('order');
-    switch($order)
-    {
-      case 'hierarchy':
-        $result = include_once('admin/hierarchy.lib');
-        $hierarchy = new hierarchy($this);
-        $result = $hierarchy->main($request, $response);
-        break;
-      default:
-        $result = include_once('admin/index.lib');
-        $index = new index($this);
-        $result = $index->main($request, $response);
-        break;
-    }
+    $threadid = $context->threadid;
 
-    return $result;
+    $data = $this->read(1);
+    if (isset($data[$threadid]))
+    {
+      unset($data[$threadid]);
+      @shm_remove_var(self::$shm, $threadid);
+    }
+    $this->write(1, $data);
   }
+  
+  
+  
+  // =======================================
+  // SHM basic fcts
+  private function attach()
+  {
+    if (!self::$shm)
+      self::$shm = shm_attach($this->shmid, $this->shmsize);    
+    self::$sem = sem_get($this->shmid, 1, 0666, -1); 
+    $res = sem_acquire(self::$sem);
+    if (!$res)
+      throw new \Error('Error: could not acquire Semaphore');
+  }
+
+  private function detach()
+  {
+    sem_release(self::$sem);
+    self::$sem = null;
+  }
+
+  private function write($id, $data)
+  {
+    $this->attach();
+    if (!shm_put_var(self::$shm, $id, $data))
+      throw new \Error('Error: could not write SHM');
+    $this->detach();
+  }
+
+  private function read($id)
+  {
+    $this->attach();
+    $data = @shm_get_var(self::$shm, $id);
+    $this->detach();
+    return $data;
+  }
+
+  private function flush()
+  {
+    // connect resource, lock
+    $this->attach();
+    // We clean the shm
+    shm_remove(self::$shm);
+    shm_detach(self::$shm);
+    self::$shm = null;
+    // unlock
+    $this->detach();
+  }
+  
 
 }
 

@@ -1,29 +1,22 @@
 <?php
 
+namespace modules;
+
 class ModuleStatic extends Module
 {
-  private $mimes = array();
+  private $mimes;
 
-  private $def = array(
-    'mimes' => array(
-        'file' => array('type' => 'file', 'mandatory' => false, 'default' => 'conf/mime.types') )
-     );
+  private $filename;
 
-  function __construct($name)
+  function __construct($config)
   {
-    parent::__construct($name);
-    if (self::$debug || $this->localdebug)
-      $this->doDebug("ModuleStatic->__construct()", WADebug::SYSTEM);
-
-    $this->base->config->addDef('', $this->def);
-  }
-
-  public function start($protocol)
-  {
+    parent::__construct($config);
+    
     // load mimes
-    $mimefile = $this->base->config->getEntry('mimes/file');
+    $this->mimes = array();
+    $mimefile = $config->mimes->file;
     if (!is_file($mimefile))
-      throw new WAWASError("Error, the mime file does not exist: ".$mimefile);
+      throw new Error("Error, the mime file does not exist: ".$mimefile);
     $mimes = file($mimefile);
     foreach ($mimes as $mime)
     {
@@ -43,60 +36,68 @@ class ModuleStatic extends Module
     }
 
     // Register hook to process requests
-    $protocol->registerHook('process', $this->name, "process");
+//    $protocol->registerHook('process', $this->name, "process");
   }
 
-  // We do not need [header] method to notify about body since we do not need body.
-
-  // we should passthrough files without memory cache ? any send hook function ?
-  public function process($request, $response)
+  public function process($context) //$host, $request, $response)
   {
-    if (self::$debug || $this->localdebug)
-      $this->doDebug("ModuleStatic->process($request, $response)", WADebug::SYSTEM);
+    $this->hits++;
+    $host = $context->host;
+    
+    // check si tenemos un match para ejecutar este modulo
+    $basedir = $host->documentroot;
+    $path = $context->request->http['path'];
 
-    if ($response->content)
-      return;
-    $name = $this->getName($request->vhost, $request->getRequest('path'));
-    // NO file found, maybe another module will know what to do
-    if (!$name)
-      return;
+    $found = false;
+    if (is_file($basedir . $path))
+    {
+      $filename = $basedir . $path;
+      $found = true;
+    }
+    
+    if (!$found)
+    {
+      if (substr($basedir . $path, -1) != '/')
+        $path .= '/';
+      // search for the indexes into this dir
+      // Check if the result is not OUTSIDE our jailed path
 
-    $f = fopen($name, "rb");
-    $response->setBody(fread($f, filesize($name)));
-    fclose($f);
+      $indexes = $host->directoryindex;
+      if ($indexes)
+      {
+        foreach($indexes as $index)
+        {
+          $newname = $basedir . $path . $index;
+          
+          if (is_file($newname))
+          {
+            $found = true;
+            $filename = $newname;
+          }
+        }
+      }
+    }
+    
+    if (!$found)
+      return false;
 
-    // Notify protocol: There is info !
-    $response->content = true;
-    // take the date of the file
-    $response->setHeader('Date', date ("r", filemtime($name)));
-    $response->setHeader('Content-Length', $response->getBodyLength());
-
-    $ext = $request->getRequest('ext');
-
-    // Set the mime based on the ext
-    if (isset($this->mimes[$ext]))
-      $response->setHeader('Content-Type', $this->mimes[$ext]);
+    $context->response->body = file_get_contents($filename);
+    $context->response->setHeader('Date', date ("r", filemtime($filename)));
+    $context->response->setHeader('Content-Length', strlen($context->response->body));
+    
+    $re = strrpos($filename, '.');
+    if ($re === false)
+      $ext = '';
     else
-      $response->setHeader('Content-Type', 'application/octet-stream');
-  }
+      $ext = substr($filename, $re+1);
 
-  private function getName($OV, $path)
-  {
-// SECURITY VERIFY    the file is NOT outside the root dir !!!! and is available and is authorized !!!
-// Any parameter to auth or not the .. into the path ?
+//    $ext = $request->http['ext'];
 
-    $basedir = $OV->getdocumentroot();
-    $hasslash = false;
-    if (substr($basedir, -1) == '/')
-      $hasslash = true;
-    if (substr($path, 0, 1) == '/')
-      $hasslash = true;
-    $name = $basedir . ($hasslash?'':'/') . $path;
-    if (is_dir($name))
-      return false;
-    if (!is_file($name))
-      return false;
-    return $name;
+    if (isset($this->mimes[$ext]))
+      $context->response->setHeader('Content-Type', $this->mimes[$ext]);
+    else
+      $context->response->setHeader('Content-Type', 'application/octet-stream');
+    return true;
   }
 
 }

@@ -1,0 +1,59 @@
+text/html			html htm
+text/css			css
+application/x-javascript	js
+image/bmp     bmp
+image/gif			gif
+image/jpeg			jpeg jpg jpe
+image/vnd.microsoft.icon ico
+
+application/x-bittorrent	torrent
+application/x-bzip2		bz2
+application/x-cdlink		vcd
+application/x-director		dcr dir dxr
+application/x-dvi		dvi
+application/x-futuresplash	spl
+application/x-gtar		gtar
+application/x-gzip		gz tgz
+application/x-hdf		hdf
+application/x-java-archive	jar
+application/x-java-jnlp-file	jnlp
+application/x-rpm		rpm
+application/x-sh		sh
+application/x-shar		shar
+application/x-shockwave-flash	swf
+application/x-tar		tar
+application/xhtml+xml		xhtml xht
+application/zip			zip
+audio/basic			au snd
+audio/midi			mid midi kar
+audio/mpeg			mpga mp2 mp3
+audio/x-aiff			aif aiff aifc
+audio/x-mpegurl			m3u
+audio/x-pn-realaudio		ram rm
+audio/x-realaudio		ra
+audio/x-wav			wav
+audio/x-ms-wma			wma
+audio/x-ms-wax			wax
+chemical/x-pdb			pdb
+chemical/x-xyz			xyz
+image/png			png
+image/x-portable-anymap		pnm
+image/x-portable-bitmap		pbm
+image/x-portable-graymap	pgm
+image/x-portable-pixmap		ppm
+text/plain			asc txt
+text/richtext			rtx
+text/rtf			rtf
+text/sgml			sgml sgm
+text/xml			xml xsl
+video/mpeg			mpeg mpg mpe
+video/quicktime			qt mov
+video/x-flv			flv
+video/x-ms-asf			asf asx
+video/x-ms-wm			wm
+video/x-ms-wmv			wmv
+video/x-ms-wmx			wmx
+video/x-ms-wvx			wvx
+video/x-msvideo			avi
+video/x-sgi-movie		movie
+x-conference/x-cooltalk		ice

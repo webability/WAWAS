@@ -1,0 +1,75 @@
+<?php
+
+/*
+    WALanguageCompiler.lib, DomCore, the WebAbility(r) Core System
+    Contains the basic class to compile an XML language file to a readable PHP array
+    (c) 2008-2012 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box
+|------------------------------------------------------------------|
+| WALanguageCompiler: XML language reader                          |
+|------------------------------------------------------------------|
+| + ::id: string                                                   |
+| + ::lang: string                                                 |
+|------------------------------------------------------------------|
+| + ::compile($buffer: XML string): Array(string)                  |
+| + ::create($id: string, $lang: string, $data: array of entries): string |
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace core;
+
+// Static class to compile language XML file
+class WALanguageCompiler
+{
+  public static $id;
+  public static $lang;
+
+  public static function compile($buffer)
+  {
+    self::$id = ''; self::$lang = '';
+    $TM = array();
+    $tree = WASimpleXML::compile($buffer);
+    if (isset($tree['tag']) && $tree['tag'] === 'language')
+    {
+      self::$id = $tree['attributes']['id'];
+      self::$lang = $tree['attributes']['lang'];
+      foreach ($tree as $k => $value)
+      {
+        if ($k === 'tag' || $k === 'attributes')
+          continue;
+        $TM[$value['attributes']['id']] = $value['data'];
+      }
+    }
+    return $TM;
+  }
+
+  public static function create($id, $language, $data)
+  {
+    $text = '<?xml version="1.0" encoding="UTF-8" ?>'.PHP_EOL.
+            '<language id="'.$id.'" lang="'.$language.'">'.PHP_EOL;
+    foreach ($data as $id => $val)
+      $text .= '  <entry id="'.$id.'"><![CDATA['.$val.']]></entry>'.PHP_EOL;
+    $text .= '</language>'.PHP_EOL;
+    return $text;
+  }
+
+}
+
+?>

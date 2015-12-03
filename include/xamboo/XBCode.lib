@@ -1,0 +1,353 @@
+<?php
+
+/* @DESCR -- Do not edit
+
+XBCode.lib, Xamboo
+Contains the basic class to contains a code page (simple page)
+(c) 2012 Philippe Thomassigny
+
+This file is part of Xamboo
+
+Xamboo is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Xamboo is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Xamboo.  If not, see <http://www.gnu.org/licenses/>.
+
+Creation: 2012-09-23
+Changes:
+  2015-07-19 Phil: Added PARAM metaword for simple pages to understand CALL syntax with named parameters.
+  2015-04-21 Phil: documentation, comments
+
+@End_DESCR */
+
+/* @UML_Box
+|------------------------------------------------------------------|
+| XBCode: page object                                              |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace xamboo;
+
+// Class to manage a page object
+class XBCode extends \core\WAClass
+{
+  protected $code = '';
+  protected $PHPExec = null;
+
+  public function __construct($data)
+  {
+    parent::__construct();
+    if (!$data || !is_string($data))
+      $data = '';
+    $this->code = XBCode::compile($data);
+  }
+
+  public function run($engine, $params)
+  {
+    $text = $this->code['content'];
+    foreach($this->code['elements'] as $item => $element)
+    {
+      $data = '';
+      switch($element['type'])
+      {
+        case 1: // list of local widgets
+          $data = 'list of local widgets';
+          break;
+        case 2: // param 1 to 99
+          $data = '';
+          if ($params && isset($params[$element['item']]))
+            $data = $params[$element['item']];
+          break;
+        case 3: // list of remote widgets
+          $data = 'list of remote widgets ' . $element['id'];
+          break;
+        case 4: // link
+          $data = 'link to ' . $element['id'];
+          break;
+        case 5: // sysparam
+          $data = 'sysparam ' . $element['param'];
+          break;
+        case 6: // clientparam
+          $data = 'clientparam ' . $element['param'];
+          break;
+        case 7: // pageparam
+          $data = $engine->maincontext['page'][$element['param']];
+          break;
+        case 8: // localpageparam
+          $data = $engine->currentcontext['page'][$element['param']];
+          break;
+        case 9: // instanceparam
+          $data = $engine->maincontext['instance'][$element['param']];
+          break;
+        case 10: // localinstanceparam
+          $data = $engine->currentcontext['instance'][$element['param']];
+          break;
+        case 11: // JS
+          $this->base->HTTPResponse->setJS($element['file']);
+          $data = '';
+          break;
+        case 12: // CSS
+          $this->base->HTTPResponse->setCSS($element['file']);
+          $data = '';
+          break;
+        case 13: // code
+          if (!$this->PHPExec)
+            $this->PHPExec = new PHPExec($this, $engine);
+          $this->PHPExec->setCode($element['code']);
+          $this->PHPExec->setCatch($element['catch']);
+          $data = $this->PHPExec->execute();
+          break;
+        case 14: // block
+          $data = $engine->run($element['id'], 1, $element['params'], $element['version'], $element['language']);
+          break;
+        case 16: // call, run
+          $data = $engine->run($element['id'], 1, $element['params'], $element['version'], $element['language']);
+          break;
+        case 15: // nested box
+          $data = 'nested box ' . $element['template'];
+          break;
+        case 20: // global response variable
+          $data = $this->base->HTTPResponse->getVariable($element['param']);
+          break;
+      }
+      $text = str_replace('__'.$item.'__', $data, $text);
+    }
+    return $text;
+  }
+
+  protected function serial(&$data)
+  {
+    $data['code'] = $this->code;
+  }
+
+  protected function unserial($data)
+  {
+    $this->code = $data['code'];
+  }
+
+  public function __toString()
+  {
+    return 'Page code';
+  }
+
+  static function compile($TEXT)
+  {
+    $reg = '/'.
+      // ==== Level 00 meta code (no param, no content)
+      '\[\[(W)IDGETS\]\]'.                                                                // index based 1
+      '|\[\[(P)ARAM([0-9]{1,2})\]\]'.                                                     // index based 2
+      '|\[\[(PA)RAM\,(.*?)\]\]'.                                                          // index based 4
+
+      // ==== Level 01 meta code (params, no content)
+      '|\[\[(WI)DGETS\,(.*?)\]\]'.                                                        // index based 6
+      '|\[\[(LI)NK\,(.*?)\]\]'.                                                           // index based 8
+      '|\[\[(SY)SPARAM\,(.*?)\]\]'.                                                       // index based 10
+      '|\[\[(CL)IENTPARAM\,(.*?)\]\]'.                                                    // index based 12
+      '|\[\[(PA)GEPARAM\,(.*?)\]\]'.                                                      // index based 14
+      '|\[\[(LO)CALPAGEPARAM\,(.*?)\]\]'.                                                 // index based 16
+      '|\[\[(IN)STANCEPARAM\,(.*?)\]\]'.                                                  // index based 18
+      '|\[\[L(OC)ALINSTANCEPARAM\,(.*?)\]\]'.                                             // index based 20
+      '|\[\[(VA)R\,(.*?)\]\]'.                                                            // index based 22
+      '|\[\[(JS)\,(.*?)\]\]'.                                                             // index based 24
+      '|\[\[(CS)S\,(.*?)\]\]'.                                                            // index based 26
+
+      // ==== Level 10 meta code (no params, content)
+      '|\[\[(PHP)(\,.*?){0,1}\:(.*?)PHP\]\]'.                                             // index based 28
+
+      // ==== Level 11 meta code (params, content)
+      '|\[\[(BLO)CK\,(.*?)(\:(.*?)){0,1}\]\]'.                                            // index based 31
+      '|\[\[(CA)LL\,(.*?)(\:(.*?)){0,1}\]\]'.                                             // index based 35
+
+      // ==== COMENTS
+      '|(%)--(.*?)--%'.                                                                   // index based 39
+
+      '/s';
+
+    preg_match_all($reg, $TEXT, $result);
+
+    $elements = array();
+    $item = 1;
+
+    if (!empty($result[0]))
+    {
+      while (list($k, $E) = each($result[0]))
+      {
+        $pos = strpos($TEXT, $E);
+        if ($result[39][$k] == '%') // invalidate any comment
+          $TEXT = substr_replace($TEXT, '', $pos, strlen($E));
+        else
+          $TEXT = substr_replace($TEXT, '__'.$item.'__', $pos, strlen($E));
+
+        if ($result[1][$k] == 'W')
+          $elements[$item++] = array('type' => 1);
+        if ($result[2][$k] == 'P')
+          $elements[$item++] = array('type' => 2, 'item' => $result[3][$k]);
+        if ($result[4][$k] == 'PA')
+          $elements[$item++] = array('type' => 2, 'item' => $result[5][$k]);
+        if ($result[6][$k] == 'WI')
+          $elements[$item++] = array('type' => 3, 'id' => $result[7][$k]);
+        if ($result[8][$k] == 'LI')
+          $elements[$item++] = array('type' => 4, 'id' => $result[9][$k]);
+        if ($result[10][$k] == 'SY')
+          $elements[$item++] = array('type' => 5, 'param' => $result[11][$k]);
+        if ($result[12][$k] == 'CL')
+          $elements[$item++] = array('type' => 6, 'param' => $result[13][$k]);
+        if ($result[14][$k] == 'PA')
+          $elements[$item++] = array('type' => 7, 'param' => $result[15][$k]);
+        if ($result[16][$k] == 'LO')
+          $elements[$item++] = array('type' => 8, 'param' => $result[17][$k]);
+        if ($result[18][$k] == 'IN')
+          $elements[$item++] = array('type' => 9, 'param' => $result[19][$k]);
+        if ($result[20][$k] == 'OC')
+          $elements[$item++] = array('type' => 10, 'param' => $result[21][$k]);
+        if ($result[22][$k] == 'VA')
+          $elements[$item++] = array('type' => 20, 'param' => $result[23][$k]);
+        if ($result[24][$k] == 'JS')
+          $elements[$item++] = array('type' => 11, 'file' => $result[25][$k]);
+        if ($result[26][$k] == 'CS')
+          $elements[$item++] = array('type' => 12, 'file' => $result[27][$k]);
+        if ($result[28][$k] == 'PHP')
+        {
+          $elements[$item++] = array('type' => 13, 'catch' => ($result[29][$k]==',catch'?true:false), 'code' => $result[30][$k]);
+        }
+        if ($result[31][$k] == 'BLO')
+        {
+          $params = array();
+          if ($result[33][$k])
+          {
+            $lines = str_replace("\r", '', $result[34][$k]);
+            $xlines = explode("\n", $lines);
+            foreach($xlines as $line)
+              $params[] = $line;
+          }
+          $data = explode(',', $result[32][$k]);
+          $elements[$item++] = array('type' => 14, 'id' => $data[0], 'version' => isset($data[1])?$data[1]:null, 'language' => isset($data[2])?$data[2]:null, 'params' => $params);
+        }
+        if ($result[35][$k] == 'CA')
+        {
+          $params = array();
+          if ($result[37][$k])
+          {
+            $lines = str_replace("\r", "\n", $result[38][$k]);
+            $xlines = explode("\n", $lines);
+            foreach($xlines as $line)
+            {
+              if (!$line || substr($line, 0, 1) == '#')
+                continue;
+              $xline = explode("=", $line);
+              $p = array_shift($xline);
+              if (!isset($params[$p]))
+                $params[$p] = implode('=', $xline);
+              else
+              {
+                if (!is_array($params[$p]))
+                  $params[$p] = array($params[$p], implode('=', $xline));
+                else
+                  $params[$p][] = implode('=', $xline);
+              }
+            }
+          }
+          $data = explode(',', $result[36][$k]);
+          $elements[$item++] = array('type' => 16, 'id' => $data[0], 'version' => isset($data[1])?$data[1]:null, 'language' => isset($data[2])?$data[2]:null, 'params' => $params);
+        }
+      }
+    }
+
+    // check for [[BOX ... BOX]] special variable: loop for nested variables
+    $reg = '/\[\[BOX\,(.*?)\:(.*?)BOX\]\]/s';
+    $regin = '/\[\[BOX\,(.*?)\:(.*?)$/s';
+
+    $loop = true;
+    $elems = array();
+    while ($loop)
+    {
+      unset($result);
+      preg_match_all($reg, $TEXT, $result);
+      // replace and interprete, doing the nested ones
+      if (!empty($result[0])) // something like [[BOX... exists in the code
+      {
+        while (list($k, $E) = each($result[0]))
+        {
+          // for nested elements: check if %%TEMP is again inside to separate it
+          $resultin = $result[2][$k];
+          $resultout = $result[0][$k];
+          $resulttemp = $result[1][$k];
+          $subresult = null;
+          $loopin = true;
+          while ($loopin)
+          {
+            unset($subresult);
+            preg_match_all($regin, $resultin, $subresult);
+            if (!empty($subresult[0]))
+            { // there are nested [[BOX
+              $resultin = $subresult[2][0];
+              $resultout = $subresult[0][0];
+              $resulttemp = $subresult[1][0];
+            }
+            else
+              $loopin = false;
+          }
+          if ($result[2][$k] != $resultin)
+          {
+            $resultout .= 'BOX]]';
+          }
+          // resulttemp is a coma separated list
+          $expresulttemp = explode(',', $resulttemp);
+
+          $pos = strpos($TEXT, $resultout);
+          $TEXT = substr_replace($TEXT, '__'.$item.'__', $pos, strlen($resultout));
+
+          $elems[$item++] = array('type' => 15, 'template' => $expresulttemp[0],
+              'params' => $expresulttemp,
+              'content' => $resultin);
+        }
+
+      }
+      else
+        $loop = false;
+    }
+
+    if (sizeof($elems)>0)
+    {
+      // some templates, we recombine the tree structure
+      XBCode::putinto($TEXT, $elements, $elems);
+    }
+    return array('content' => $TEXT,
+        'elements' => $elements);
+  }
+
+  // =========================================================
+  // Create a hierarchical elements array
+  static function putinto($text, &$elements, $elems)
+  {
+    reset($elems);
+    while (list($k, $e) = each($elems))
+    {
+      if (strstr($text, '__'.$k.'__'))
+      {
+        $elements[$k] = $e;
+        $elements[$k]['elements'] = array();
+        XBCode::putinto($e['content'], $elements[$k]['elements'], $elems);
+      }
+    }
+  }
+
+  function generatePHP()
+  {
+  
+  
+  }
+  
+}
+
+?>

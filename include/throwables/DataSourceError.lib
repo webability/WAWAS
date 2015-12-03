@@ -3,7 +3,7 @@
 /*
     DataSourceError.lib, DomCore, the WebAbility(r) Core System
     This object is the basic datasource error (that should not be caught).
-    (c) 2008-2010 Philippe Thomassigny
+    (c) 2008-2012 Philippe Thomassigny
 
     This file is part of DomCore
 
@@ -29,7 +29,9 @@
 |------------------------------------------------------------------|
 @End_UML_Box */
 
-class DataSourceError extends WAError
+namespace throwables;
+
+class DataSourceError extends \core\WAError
 {}
 
 ?>

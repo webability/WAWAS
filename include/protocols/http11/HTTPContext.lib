@@ -1,0 +1,9 @@
+<?php
+
+namespace protocols\http11;
+
+class HTTPContext extends \server\Context
+{
+}
+
+?>

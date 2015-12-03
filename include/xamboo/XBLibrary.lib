@@ -1,0 +1,68 @@
+<?php
+
+/*
+XBLibrary.lib, Xamboo
+Contains the basic class to contains a PHP page object instance
+(c) 2012 Philippe Thomassigny
+
+This file is part of Xamboo
+
+Xamboo is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Xamboo is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Xamboo.  If not, see <http://www.gnu.org/licenses/>.
+
+Creation: 2012-09-23
+Changes:
+  2015-04-21 Phil: documentation, comments
+
+*/
+
+/* @UML_Box
+|------------------------------------------------------------------|
+| XBLibrary: page object                                           |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+| + new XBLibrary($template, $language)                            |
+| + __toString(): string                                           |
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace xamboo;
+
+// Class to manage a page object
+class XBLibrary extends \core\WAObject
+{
+  protected $template;
+  protected $language;
+
+  public function __construct($template, $language)
+  {
+    parent::__construct();
+    $this->template = $template;
+    $this->language = $language;
+  }
+
+  public function run($engine, $params)
+  {
+    if ($this->template instanceof WATemplate)
+      return $this->template->resolve();
+    return 'La libreria no esta sobrecargando el método run(). Favor de completar la libreria.';
+  }
+
+  public function __toString()
+  {
+    return "Library";
+  }
+
+}
+
+?>

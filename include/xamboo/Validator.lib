@@ -1,0 +1,103 @@
+<?php
+
+/* @DESCR -- Do not edit
+
+Validator.lib, Xamboo
+Main Code Server: load and dispatch code pages
+(c) 2015 Philippe Thomassigny
+
+This file is part of Xamboo
+
+Xamboo is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Xamboo is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Xamboo.  If not, see <http://www.gnu.org/licenses/>.
+
+Creation: 2012-09-23
+Changes:
+  2015-04-21 Phil: documentation, comments
+
+@End_DESCR */
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| Validator : Validate input strings and parameters from outside   |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace xamboo;
+
+class Validator extends \patterns\Singleton
+{
+  const ALPHANUMERIC = 1;
+  const NUMERIC = 2;
+  const INTEGER = 3;
+  const REGEXP = 4;
+  const SET = 5;
+  const SETOFVALUES = 6;
+  const ALL = 7;
+
+  public function __construct()
+  {
+    parent::__construct(null);
+  }
+
+  // ====================================================================
+  // variables checker
+  // ====================================================================
+  public static function checkVariable($Var, $Type, $Query = null, $NotNull = false)
+  {
+    // returns a true if the variable is OK
+    if ($Var == null)
+      return !$NotNull;
+    if (is_array($Var))
+    {
+      $res = true;
+      foreach($Var as $V)
+      {
+        $res &= Validator::checkVariable($V, $Type, $NotNull, $Query);
+      }
+      return $res;
+    }
+    switch($Type)
+    {
+      case Validator::ALPHANUMERIC:
+        // check the variable is only a-z A-Z 0-9 ._-
+        return preg_match("/^[A-Za-z0-9_\\-\\.\\s]{1,}$/", $Var);
+      case Validator::NUMERIC:
+        // check the variable is only [+-] 0-9 .
+        return preg_match("/^[+\\-]?[0-9]{1,}(\\.[0-9]{1,}){0,1}$/", $Var);
+      case Validator::INTEGER:
+        // check the variable is only 0-9
+        return preg_match("/^[0-9]{1,}$/", $Var);
+      case Validator::REGEXP:
+        // check the variable is reg expresion compliant
+        if (substr($Query, 0, 1) != "/")
+          $Query = "/^".$Query."\$/";
+        return preg_match($Query, $Var);
+      case Validator::SET:
+        // check the variable is in the set indexes
+        return (isset($Query[$Var]));
+      case Validator::SETOFVALUES:
+        // check the variable is in the set
+        return (in_array($Var, $Query));
+      case Validator::ALL:
+        return true; // we dont care what is it
+      default:
+        throw new BadVariableException("Error into the Variable type: <b>$Type</b>");
+    }
+  }
+
+}
+
+?>

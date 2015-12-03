@@ -1,0 +1,38 @@
+<?php
+
+namespace modules;
+
+class ModuleLog extends Module
+{
+  private $syslog;
+  
+  function __construct($config)
+  {
+    parent::__construct($config);
+    
+    $this->syslog = $config->log->syslog;
+  }
+  
+  // The init method called once at the beginning of the server
+  public function init($modules, $protocols, $listeners) 
+  {
+    $this->doLog('Starting up Server System...');
+  }
+
+  // The shutdown method called once at the end
+  public function shutdown() 
+  {
+    $this->doLog('Shuting down up Server System...');
+    
+    print "shutdown de ModuleLog\n";
+  }
+  
+  
+  private function doLog($message)
+  {
+    $this->hits++;
+    $f = file_put_contents($this->syslog, date('Y-m-d H:i:s') . ': ' . $message . "\n", FILE_APPEND);
+  }
+}
+
+?>

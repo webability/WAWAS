@@ -1,0 +1,142 @@
+<?php
+
+/* @DESCR -- Do not edit
+
+Base_Engine.lib, Xamboo
+Common engine configuration for 'Base' objects
+(c) 2015 Philippe Thomassigny
+
+This file is part of Xamboo
+
+Xamboo is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Xamboo is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Xamboo.  If not, see <http://www.gnu.org/licenses/>.
+
+Creation: 2015-03-01
+Changes:
+  2015-04-21: Phil, documentation, comments
+  2015-04-21: Phil, removed config params that were not used
+  2015-04-22: Phil, added HISTORY and HISTORYDIR parameters to keep the history of changes
+
+@End_DESCR */
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| Base_Engine : Common engine configuration for 'Base' objects     |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace xamboo;
+
+class Base_Engine extends \core\WABase
+{
+  public $config;          // config file
+  
+  public $PAGESDIR;        // directory of pages of the instance
+  public $PAGESCONTAINER;  // directory of pages of the instance}
+
+  public $CACHE1;          // Do we use LEVEL 1 cache
+  public $CACHE1DIR;       // directory of cache level 1: precompiled afos of pages
+  public $HISTORY;         // history of changes activation, MUST have CACHE1 activated and working
+  public $HISTORYDIR;      // directory of where to keep the changes of code
+  public $CACHE2;          // Do we use LEVEL 2 cache
+  public $CACHE2DIR;       // directory of cache level 2: full pages/block calculated 
+
+  // The data to search for instances
+  public $SKIN;
+  public $DefaultVersion;
+  public $DefaultLanguage;
+  public $Version;
+  public $Language;
+
+  public $SHMLOAD;              // Do we use shared memory
+  public $SHMSIZE;              // size of shared memory
+  public $SHMID;                // any arbitrary ID
+  public $SHM = null;           // The shared memory object for afo caches
+  
+  public $HTTPRequest = null;   // The HTTP request element (if web enabled)
+  public $HTTPResponse = null;  // The HTTP response element (if web enabled)
+
+  public $mainpage = 'home';    // name of main site page
+  public $errorpage = 'error';  // name of error page (generally with a template)
+  public $errorblock = 'errorblock';  // name of error block (just a red replacement div)
+  
+  public function __construct($config, $context = null)
+  {
+    parent::__construct();
+
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("xamboo/Base_Engine->__construct(%)", WADebug::SYSTEM, $config);
+    
+    // if $config is not an array but a string, we parse it
+    if (!is_array($config) && is_string($config))
+      $config = XBCompiler::compileLines($config);
+
+    // basic engine config
+    // Mandatory parameters: (if this parameter is not set, will search the pages on the local dir, 
+    //   which is published in the web server, which is a very bad idea to put the pages here).
+    $this->PAGESDIR = isset($config['PAGESDIR'])?$config['PAGESDIR']:null;
+    
+    // Optional parameters:
+    $this->PAGESCONTAINER = isset($config['PAGESCONTAINER'])?$config['PAGESCONTAINER']:'pages/';
+
+    $this->HISTORY = isset($config['HISTORY'])?$config['HISTORY']:false;
+    $this->HISTORYDIR = isset($config['HISTORYDIR'])?$config['HISTORYDIR']:null;
+    $this->CACHE1 = isset($config['CACHE1'])?$config['CACHE1']:false;
+    $this->CACHE1DIR = isset($config['CACHE1DIR'])?$config['CACHE1DIR']:null;
+    $this->CACHE2 = isset($config['CACHE2'])?$config['CACHE2']:false;
+    $this->CACHE2DIR = isset($config['CACHE2DIR'])?$config['CACHE2DIR']:null;
+
+    $this->SHMLOAD = isset($config['SHMLOAD'])?$config['SHMLOAD']:false;
+    $this->SHMSIZE = isset($config['SHMSIZE'])?$config['SHMSIZE']:null;
+    $this->SHMID = isset($config['SHMID'])?$config['SHMID']:null;
+
+    $this->SKIN = isset($config['SKIN'])?$config['SKIN']:null;
+    $this->DefaultVersion = isset($config['DefaultVersion'])?$config['DefaultVersion']:'base';
+    $this->DefaultLanguage = isset($config['DefaultLanguage'])?$config['DefaultLanguage']:'en';
+    $this->Version = isset($config['Version'])?$config['Version']:'base';
+    $this->Language = isset($config['Language'])?$config['Language']:'en';
+
+    $this->mainpage = isset($config['mainpage'])?$config['mainpage']:'home';
+    $this->errorpage = isset($config['errorpage'])?$config['errorpage']:'error';
+    $this->errorblock = isset($config['errorblock'])?$config['errorblock']:'errorblock';
+
+//    if (self::$htmlapi)
+    {
+      $this->HTTPRequest = new HTTPRequest($context);
+      $this->HTTPResponse = new HTTPResponse($context);
+    }
+
+    if ($this->SHMLOAD)
+    {
+      try
+      {
+        $this->SHM = new WASHM($this->SHMSIZE, $this->SHMID, 'xb');
+      }
+      catch (SHMError $e)
+      {
+        // no shared memory available (may happen)
+        $this->SHM = null;
+      }
+    }
+  }
+  
+  public function postrun($data)
+  {
+    return $data;
+  }
+
+}
+
+?>

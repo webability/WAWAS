@@ -3,7 +3,7 @@
 /*
     WAClass.lib, DomCore, the WebAbility(r) Core System
     Contains the basic object to give seriability to all classes
-    (c) 2008-2010 Philippe Thomassigny
+    (c) 2008-2012 Philippe Thomassigny
 
     This file is part of DomCore
 
@@ -34,8 +34,9 @@
 |------------------------------------------------------------------|
 @End_UML_Box */
 
+namespace core;
 
-class WAClass extends WAObject implements Serializable
+class WAClass extends WAObject implements \Serializable
 {
   public function __construct()
   {
@@ -46,7 +47,7 @@ class WAClass extends WAObject implements Serializable
   // $data is an array by default
   protected function serial(&$data)
   {
-    throw new CoreError(WAMessage::getMessage('WAClass.serial'));
+    throw new \throwables\CoreError(\core\WAMessage::getMessage('WAClass.serial'));
   }
 
   // Do a normal serialize unless the method is overloaded
@@ -63,7 +64,7 @@ class WAClass extends WAObject implements Serializable
   // $data is the same data as for serializing
   protected function unserial($data)
   {
-    throw new CoreError(WAMessage::getMessage('WAClass.unserial'));
+    throw new \throwables\CoreError(\core\WAMessage::getMessage('WAClass.unserial'));
   }
 
   // Do a normal unserialize unless the method is overloaded

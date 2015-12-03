@@ -1,0 +1,119 @@
+<?php
+
+/* @DESCR -- Do not edit
+
+WebAbility Base Version: >= 3
+Module: Common
+Language: >= PHP5 only
+Creation: 09/Mar/2006
+Copyright: Ing. Philippe Thomassigny (c) 2002-2006
+
+-
+
+@End_DESCR */
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| HTTPResponse : Contains all HTTP response data                   |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace protocols\http11;
+
+class HTTPResponse
+{
+  public $responsecode = 200;
+  public $responsemessage = 'OK';
+  public $headers = array();
+  public $cookies = array();
+  public $body = '';
+
+  public function __construct()
+  {
+  }
+
+  public function clear()
+  {
+    $this->responsecode = 200;
+    $this->responsemessage = 'OK';
+    $this->headers = array();
+    $this->cookies = array();
+    $this->body = '';
+  }
+  
+  
+  public function setResponse($code, $message)
+  {
+    $this->responsecode = $code;
+    $this->responsemessage = $message;
+  }
+
+  public function getResponseCode()
+  {
+    return $this->responsecode;
+  }
+
+  public function getResponseMessage()
+  {
+    return $this->responsemessage;
+  }
+
+  public function setHeader($id, $str)
+  {
+    $this->headers[$id] = $str;
+  }
+
+  public function getHeader($entry = null)
+  {
+    if ($entry === null)
+      return $this->headers;
+    if (isset($this->headers[$entry]))
+      return $this->headers[$entry];
+    return null;
+  }
+
+  public function setCookie($id, $cookie)
+  {
+    $this->cookies[$id] = $cookie;
+  }
+
+  public function getcookie($entry = null)
+  {
+    if ($entry === null)
+      return $this->cookies;
+    if (isset($this->cookies[$entry]))
+      return $this->cookies[$entry];
+    return null;
+  }
+
+  public function getData()
+  {
+    // any POINTER ? to not send twice the same info
+    return $this->getBody();
+  }
+
+  public function setBody($data)
+  {
+    $this->body = $data;
+  }
+
+  public function addBody($data)
+  {
+    $this->body .= $data;
+  }
+
+  public function getBody()
+  {
+    return $this->body;
+  }
+
+  public function getBodyLength()
+  {
+    return strlen($this->body);
+  }
+
+}
+
+?>

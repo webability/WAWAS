@@ -1,68 +1,61 @@
 <?php
 
+namespace modules;
+
 class ModulePHP extends Module
 {
-  private $def = array(
-    'phpextension' => array('type' => 'loop', 'mandatory' => true, 'data' => 'str')
-   );
+  private $filename;
 
-  function __construct($name)
+  function __construct($config)
   {
-    parent::__construct($name);
-    if (self::$debug || $this->localdebug)
-      $this->doDebug("ModulePHP->__construct()", WADebug::SYSTEM);
-
-    $this->base->config->addDef('virtualhosts/default', $this->def);
-    $this->base->config->addDef('virtualhosts/virtualhost', $this->def);
-  }
-
-  public function start($protocol)
-  {
-
+    parent::__construct($config);
+    
     // Register hook to process requests
-    $protocol->registerHook('process', $this->name, "process");
+//    $protocol->registerHook('process', $this->name, "process");
   }
 
-  public function process($OV, $request, $response)
+  public function process($context) //$host, $request, $response)
   {
-    if (self::$debug || $this->localdebug)
-      $this->doDebug("ModulePHP->process($OV, $request, $response)", WADebug::SYSTEM);
+    $this->hits++;
+    $host = $context->host;
+    
+    // check si tenemos un match para ejecutar este modulo
+    $basedir = $host->documentroot;
+    $path = $context->request->http['path'];
 
-    if ($response->content)
-      return;
-
-    $phpexts = $OV->getEntry('phpextension');
-    $ext = $request->getRequest('ext');
-    $accept = false;
-    foreach($phpexts as $phpext)
+    $found = false;
+    if (is_file($basedir . $path))
     {
-      if ($phpext == $ext)
+      if (substr($path, -4) == '.php')
       {
-        $accept = true;
-        break;
+        $filename = $basedir . $path;
+        $found = true;
       }
     }
-    if (!$accept)
-      return;
+    
+    if (!$found)
+      return false;
 
-    if (self::$debug || $this->localdebug)
-      $this->doDebug("ModulePHP: request accepted", WADebug::SYSTEM);
-
-    $script = $OV->getDocumentRoot() . $request->getRequest('path');
-
-    // Do we fork ? (for security, yes)
-
-    // execute the script
+    $dirname = substr($filename, 0, strrpos($filename, '/'));
+    $filename = substr($filename, strrpos($filename, '/') + 1);
+    print $filename . PHP_EOL;
+    print $dirname . PHP_EOL;
+    $actualdir = getcwd();
+    chdir($dirname);
 
     ob_start();
-    require $script;
-    $data = ob_get_contents();
+    require $filename;
+    $res = ob_get_contents();
     ob_end_clean();
+    chdir($actualdir);
 
-    $response->content = true;
-    $response->setBody($data);
-    $response->setHeader('Content-Length', $response->getBodyLength());
+    $context->response->body = $res;
+    $context->response->setHeader('Date', date ("r", filemtime($filename)));
+    $context->response->setHeader('Content-Length', strlen($context->response->body));
+    
+    return true;
   }
+
 }
 
 ?>

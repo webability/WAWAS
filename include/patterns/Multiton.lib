@@ -1,0 +1,69 @@
+<?php
+
+/*
+    Multiton.lib, DomCore, the WebAbility(r) Core System
+    Contains the multiton pattern class
+    (c) 2008-2012 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| Multiton : WebAbility single parametered instance pattern class  |
+|------------------------------------------------------------------|
+| - ::$instance: array(Multiton)                                   |
+| - $parameter: mixed                                              |
+|------------------------------------------------------------------|
+| + new Multiton($parameter: mixed)                                |
+| + ::getInstance($parameter: mixed, $class: string)               |
+| + __clone()                                                      |
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace patterns;
+
+class Multiton extends \core\WAObject
+{
+  private static $instance = array();
+  protected $parameter = null;
+
+  function __construct($parameter)
+  {
+    if (isset(self::$instance[get_class($this)][$parameter]))
+      throw new \throwables\PatternError(\core\WAMessage::getMessage('Multiton.noclone').get_class($this)."[$parameter]");
+    parent::__construct();
+    self::$instance[get_class($this)][$parameter] = $this;
+    $this->parameter = $parameter;
+  }
+
+  public static function getInstance($parameter, $classname = null)
+  {
+    if (!$classname)
+      $classname = get_called_class();
+    if (!isset(self::$instance[$classname][$parameter]))
+      new $classname($parameter);
+    return self::$instance[$classname][$parameter];
+  }
+
+  public function __clone()
+  {
+    throw new \throwables\PatternError(\core\WAMessage::getMessage('Multiton.noclone').get_class($this)."[$this->parameter]");
+  }
+
+}
+
+?>

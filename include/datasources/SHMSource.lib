@@ -3,7 +3,7 @@
 /*
     SHMSource.lib, DomCore, the WebAbility(r) Core System
     Contains the shared memory access object
-    (c) 2008-2011 Philippe Thomassigny
+    (c) 2008-2012 Philippe Thomassigny
 
     This file is part of DomCore
 
@@ -36,6 +36,8 @@
 |------------------------------------------------------------------|
 |------------------------------------------------------------------|
 @End_UML_Box */
+
+namespace datasources;
 
 class SHMSource extends DataSource
 {

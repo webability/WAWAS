@@ -1,0 +1,73 @@
+<?php
+
+/*
+    Singleton.lib, DomCore, the WebAbility(r) Core System
+    Contains the singleton pattern class
+    (c) 2008-2012 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| Singleton : singleton pattern class                              |
+|------------------------------------------------------------------|
+| - ::instance : array(Singleton)                                  |
+|------------------------------------------------------------------|
+| + new Singleton()                                                |
+| + ::getInstance($name: string): Singleton extended               |
+| + __clone(): object                                              |
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace patterns;
+
+class Singleton extends \core\WAObject
+{
+  private static $instance = array();
+
+  public function __construct()
+  {
+    if (isset(self::$instance[get_class($this)]))
+      throw new \throwables\PatternError(\core\WAMessage::getMessage('Singleton.noclone').get_class($this));
+    parent::__construct();
+    self::$instance[get_class($this)] = $this;
+  }
+
+  public static function getInstance($classname = null)
+  {
+    if (!$classname)
+      $classname = get_called_class();
+    if (!isset(self::$instance[$classname]))
+      new $classname();
+    return self::$instance[$classname];
+  }
+
+  public static function hasInstance($classname = null)
+  {
+    if (!$classname)
+      $classname = get_called_class();
+    return isset(self::$instance[$classname]);
+  }
+
+  public function __clone()
+  {
+    throw new \throwables\PatternError(\core\WAMessage::getMessage('Singleton.noclone').get_class($this));
+  }
+
+}
+
+?>

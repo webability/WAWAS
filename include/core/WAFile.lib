@@ -3,7 +3,7 @@
 /*
     WAFile.lib, DomCore, the WebAbility(r) Core System
     Contains the basic class to manipulate files and directories
-    (c) 2008-2010 Philippe Thomassigny
+    (c) 2008-2012 Philippe Thomassigny
 
     This file is part of DomCore
 
@@ -38,6 +38,8 @@
 | + ::deleteAll($dir: string, $reConstraint: regexp)                         |
 |----------------------------------------------------------------------------|
 @End_UML_Box */
+
+namespace core;
 
 class WAFile
 {
@@ -90,7 +92,7 @@ class WAFile
       if(!file_exists($prepend.$dir.$p))
       {
         if (!@mkdir($prepend.$dir.$p, $mask?$mask:self::$dirmask))
-          throw new FileException(WAMessage::getMessage('WAFile.mkdirproblem').$prepend.$dir.$p);
+          throw new \throwables\FileException(\core\WAMessage::getMessage('WAFile.mkdirproblem').$prepend.$dir.$p);
       }
     }
     clearstatcache();
@@ -109,7 +111,7 @@ class WAFile
     elseif (is_file($origin))
       copy($origin, $destination) && chmod($destination, self::$filemask);
     else
-      throw new FileException(WAMessage::getMessage('WAFile.unknownfile').$origin);
+      throw new \throwables\FileException(\core\WAMessage::getMessage('WAFile.unknownfile').$origin);
   }
 
   // ======================================================
@@ -135,11 +137,11 @@ class WAFile
     // $dir should not be too tiny string, are we deleting something from the system ?
     // this is a hard security for if your $dir assignation gets any error or so, to not delete wrong stuff
     if (strlen($dir) < 10)
-      throw new FileException(WAMessage::getMessage('WAFile.baddir').$dir);
+      throw new \throwables\FileException(\core\WAMessage::getMessage('WAFile.baddir').$dir);
     // $reConstraint is a regular expression applied on the directory to delete,
     // may contain a sub part, or a specific mask to be sure we are deleting what we pretend to delete
     if (!preg_match($reConstraint, $dir))
-      throw new FileException(WAMessage::getMessage('WAFile.baddir').$dir);
+      throw new \throwables\FileException(\core\WAMessage::getMessage('WAFile.baddir').$dir);
 
     if(is_file($dir))
       unlink($dir);
@@ -153,13 +155,32 @@ class WAFile
         if (is_dir($dir.'/'.$file))
         {
           WAFile::deleteAll($dir.'/'.$file, $reConstraint);
-          rmdir($dir.'/'.$file);
         }
         elseif (is_file($dir.'/'.$file))
           unlink($dir.'/'.$file);
       }
       closedir($dd);
       rmdir($dir);
+    }
+    else
+    {
+      // any subpattern (must have * at the end) 
+      $dd = glob($dir);
+      // gets the dir root of the pattern
+      $xdir = explode('/', $dir);
+      array_pop($xdir);
+      $rootdir = implode('/', $xdir);
+      foreach($dd as $file)
+      {
+        if($file == '.' || $file == '..')
+          continue;
+        if (is_dir($file))
+        {
+          WAFile::deleteAll($file, $reConstraint);
+        }
+        elseif (is_file($file))
+          unlink($file);
+      }
     }
     return true;
   }

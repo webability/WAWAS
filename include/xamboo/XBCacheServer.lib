@@ -1,0 +1,69 @@
+<?php
+
+/* @DESCR -- Do not edit
+
+CacheServer.lib, Xamboo
+Main Caches Server: load and dispatch caches
+(c) 2015 Philippe Thomassigny
+
+This file is part of Xamboo
+
+Xamboo is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Xamboo is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Xamboo.  If not, see <http://www.gnu.org/licenses/>.
+
+Creation: 2012-09-23
+Changes:
+  2015-04-21 Phil: documentation, comments
+
+@End_DESCR */
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| CacheServer : Main Caches Server: load and dispatch caches |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace xamboo;
+
+class XBCacheServer extends \patterns\Multiton
+{
+  private $cache;
+
+  public function __construct($id)
+  {
+    parent::__construct($id);
+
+    // Separate page path from page id
+    $uid = (strpos($id, '/') !== false)?substr($id, strrpos($id, '/')+1):$id;
+    
+    $this->cache = new \datasources\FastObjectSource(
+        new \datasources\FileSource($this->base->CACHE2DIR, 'cache/'. $this->base->PAGESCONTAINER . '/' . $id . '/', $uid . '.cache.afo', true),
+        $this->base->SHM?new \datasources\SHMSource( $this->base->PAGESCONTAINER . '/' . $id . '/' . $uid . '.cache.afo', $this->base->SHM):null
+      );
+  }
+  
+  public function read()
+  {
+    return $this->cache->read();
+  }
+
+  public function write($data)
+  {
+    return $this->cache->write($data);
+  }
+
+}
+
+?>

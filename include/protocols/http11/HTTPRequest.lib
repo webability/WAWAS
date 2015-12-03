@@ -1,0 +1,54 @@
+<?php
+
+namespace protocols\http11;
+
+class HTTPRequest
+{
+  public $vhost = '';
+
+  public $tempbuffer = '';
+  public $synchro = false;
+  
+  public $hasheaders = false;
+  public $rawheaders = '';
+  public $http = array();
+  public $gets = array();
+  public $headers = array();
+  public $responseheaders = array();
+  public $cookies = array();
+
+  public $needbody = false;
+  public $hasbody = false;
+  public $rawbody = '';
+  public $lengthbody = 0;
+  public $posts = array();  
+  
+  public function __construct()
+  {
+  }
+  
+  public function clear()
+  {
+    $this->vhost = '';
+    $this->tempbuffer = '';
+    $this->synchro = false;
+
+    $this->hasheaders = false;
+    $this->rawheaders = '';
+    $this->http = array();
+    $this->gets = array();
+    $this->headers = array();
+    $this->cookie = array();
+
+    $this->needbody = false;
+    $this->hasbody = false;
+    $this->rawbody = '';
+    $this->lengthbody = 0;
+    $this->posts = array();
+  }
+  
+  
+  
+}
+
+?>

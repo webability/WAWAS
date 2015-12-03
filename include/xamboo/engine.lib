@@ -1,0 +1,425 @@
+<?php
+
+/* @DESCR -- Do not edit
+
+Base_Engine.lib, Xamboo
+Common engine configuration for 'Base' objects
+(c) 2015 Philippe Thomassigny
+
+This file is part of Xamboo
+
+Xamboo is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Xamboo is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Xamboo.  If not, see <http://www.gnu.org/licenses/>.
+
+Creation: 2012-09-23
+Changes:
+  2012-12-15 Phil: I added the URI resolver in the engine instead of in the index
+  2013-01-05 Phil: I added the template and language resolution with 2 new  parameters of the run method
+  2013-02-01 Phil: I added language and version into the context
+  2013-02-01 Phil: I added the cache ID calculator based on cache rules
+  2013-04-22 Phil: I integrated Xamboo as a LGPL software for github and for the webability network
+  2013-11-15 Phil: I added cache with variables and skins
+  2014-07-08 Phil: I added error resolution with page and block. All errors are now in english
+  2014-07-09 Phil: I added parted template [[CONTENT,blockid]] with multipart pages (only from library for now)
+  2015-04-21 Phil: documentation, comments
+  2015-04-22 Phil: Added declaration of 4 basic types of pages and the posibility to add new types
+  2015-11-17 Phil: Compatibility with PHP7, namespaces added
+
+@End_DESCR */
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| Base_Engine : Common engine configuration for 'Base' objects     |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace xamboo;
+
+class engine extends \core\WAClass
+{
+  const VERSION = '3.0.0';
+
+  public $URI = '';
+  public $maincontext;
+  public $currentcontext;
+  public $historycontext = array();
+  public $pagetypes = array(
+      'simple' => array(
+          'type' => 'server',
+          'server' => '\xamboo\XBCodeServer',
+          'run' => true
+        ),
+      'library' => array(
+          'type' => 'library',
+          'language' => true,
+          'template' => true
+        ),
+      'template' => array(
+          'type' => 'server',
+          'server' => '\xamboo\XBTemplateServer',
+          'run' => false
+        ),
+      'language' => array(
+          'type' => 'server',
+          'server' => '\xamboo\XBLanguageServer',
+          'run' => false
+        ),
+    );
+ 
+  public function __construct($URI = '')
+  {
+    parent::__construct();
+
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("xamboo/engine->__construct(%)", WADebug::SYSTEM, $URI);
+      
+    $this->URI = $URI;
+  }
+
+  public function registerPageType($type, $definition)
+  {
+    $this->pagetypes['$type'] = $definition;
+  }
+  
+  // $P is the page id, $context is null for main page call, 1 for inner pages (blocks), 2 for outer pages (templates)
+  // main page call sets the main_context in the engine class
+  // params have the full path in array when it is main page, and build params for any other block
+  public function run($P, $context = null, $params = null, $version = null, $language = null, $method = null)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("xamboo/engine->run(%, %, %)", WADebug::SYSTEM, $P, $context, $params);
+
+    if (!$P)
+      $P = $this->base->mainpage;
+    // ===== URI PAGE RESOLVER =====
+    // URI comes with first / , we have to remove it
+    if (substr($P, 0, 1) == '/')
+      $P = substr($P, 1);
+    // search the first page that match starting with the deeper one
+    $originalP = $P;
+    while (true)
+    {
+      // page MUST exist and be available
+      $page = XBPageServer::getInstance($P)->read();
+      if ($this->isAvailable($page, $context))
+        break;
+      if (strlen($P) > 1 && strrpos($P, '/') !== false)
+      {
+        $P = substr($P, 0, strrpos($P, '/'));
+      }
+      else
+      {
+        return $this->launchError($context, $originalP, 'Error: the page '.$originalP.' does not exist', 'Error: the block '.$originalP.' does not exist');
+      }
+    }
+    
+    if (!$context) // page called by URI
+    {
+      if ($page->type == 'redirect')
+      {
+        $r = explode(',', $page->redirect);
+        header("HTTP/1.1 301 Moved Permanently");
+        header('Location: ' . rawurldecode($r[1]));
+        return true;
+      }
+    
+      // The params becomes the last part of the URI
+      $lastpartP = substr($originalP, strlen($P)+1);
+      if ($lastpartP)
+      {
+        $xP = explode('/', $lastpartP);
+        $params = $xP;
+      }
+    }
+    
+    // ===== CREATES THE PAGE IDENTITY =====
+    $skin = $this->base->SKIN?'.'.$this->base->SKIN:'';
+    $version = $version?$version:($page->defaultversion?$page->defaultversion:$this->base->Version);
+    $language = $language?$language:($page->defaultlanguage?$page->defaultlanguage:$this->base->Language);
+    $identities = array($skin . '.' . $version . '.' . $language => array('version' => $version, 'language' => $language));
+    $version2 = $page->defaultversion?$page->defaultversion:$this->base->Version;
+    $language2 = $page->defaultlanguage?$page->defaultlanguage:$this->base->Language;
+    $i2 = $skin . '.'.$version2 . '.' . $language2;
+    $i3 = $skin . '.'.$this->base->Version . '.' . $this->base->Language;
+    $i4 = $skin . '.'.$this->base->DefaultVersion . '.' . $this->base->DefaultLanguage;
+    if (!isset($identities[$i2]))
+      $identities[$i2] = array('version' => $version2, 'language' => $language2);
+    if (!isset($identities[$i3]))
+      $identities[$i3] = array('version' => $this->base->Version, 'language' => $this->base->Language);
+    if (!isset($identities[$i4]))
+      $identities[$i4] = array('version' => $this->base->DefaultVersion, 'language' => $this->base->DefaultLanguage);
+    $identities[$skin] = array('version' => null, 'language' => null);
+    if ($skin)
+    {
+      $i5 = '.'.$version . '.' . $language;
+      $i6 = '.'.$version2 . '.' . $language2;
+      $i7 = '.'.$this->base->Version . '.' . $this->base->Language;
+      $i8 = '.'.$this->base->DefaultVersion . '.' . $this->base->DefaultLanguage;
+      if (!isset($identities[$i5]))
+        $identities[$i5] = array('version' => $version, 'language' => $language);
+      if (!isset($identities[$i6]))
+        $identities[$i6] = array('version' => $version2, 'language' => $language2);
+      if (!isset($identities[$i7]))
+        $identities[$i7] = array('version' => $this->base->Version, 'language' => $this->base->Language);
+      if (!isset($identities[$i8]))
+        $identities[$i8] = array('version' => $this->base->DefaultVersion, 'language' => $this->base->DefaultLanguage);
+      $identities[''] = array('version' => null, 'language' => null);
+    }
+    
+    // Check instances against every identity
+    $instance = null;
+    foreach($identities as $id => $data)
+    {
+      $instance = XBInstanceServer::getInstance($P.$id)->read();
+      if ($instance)
+      {
+        $version = $data['version'];
+        $language = $data['language'];
+        break;
+      }
+    }
+    
+    if (!$instance)
+    {
+      // No instance at all, error
+      return $this->launchError($context, $P, 'Error: the page '.$P.' has no instance', 'Error: the block '.$P.' has no instance');
+    }
+
+    $this->pushcontext($context, $originalP, $P, $page, $instance, $params, $version, $language);
+
+    $exclude = false;
+    if ($this->base->CACHE2 && ($instance->cache == 'full' || $instance->cache == 'yes'))
+    {
+      // some excludes ?
+      if ($instance->cacheexclude)
+      {
+        if (!is_array($instance->cacheexclude))
+          $instance->cacheexclude = array($instance->cacheexclude);
+        foreach($instance->cacheexclude as $str)
+        {
+          if (substr($this->URI, 0, strlen($str)) == $str)
+          {
+            $exclude = true;
+            break;
+          }
+        }
+      }
+
+      if (!$exclude)
+      {
+        // calculate cache ID
+        $cacheid = $this->getCacheID($instance->cachevariables);
+        $cache = XBCacheServer::getInstance($cacheid)->read();
+        // check cache rules
+// *** MISSING
+        // (time outs, vars, rules)
+        
+        if ($cache !== null)
+        {
+          // Un bloque no tiene derecho de afectar todo el funcionamiento del engine
+          if (!$context)
+          {
+// **** checkar si se puede poner una variable en instance/cacheheaders = true/false
+
+            $this->base->HTTPResponse->load($cache['response']);
+            // remasterize the current and piled context with the cached context
+            $this->popcontext();
+            $this->currentcontext = unserialize($cache['context']);
+            array_unshift($this->historycontext, $this->currentcontext);
+            $this->maincontext = unserialize($cache['maincontext']);
+            $page = $this->maincontext['page'];
+            $instance = $this->maincontext['instance'];
+          }
+          
+          $text = $cache['data'];
+          if ($instance->cache == 'yes' && isset($page->template) && $page->template)
+          {
+            $fathertemplate = $this->run($page->template, 2);
+            if (is_array($text))
+            {
+              foreach($text as $k => $block)
+                $fathertemplate = str_replace("[[CONTENT,{$k}]]", $block, $fathertemplate);
+              $text = $fathertemplate;
+            }
+            else
+              $text = str_replace("[[CONTENT]]", $text, $fathertemplate);
+          }
+          $this->popcontext();
+          return $text;
+        }
+      }
+    }
+
+    $text = '';
+    if (isset($this->pagetypes[$page->type]))
+    {
+      $code = null;
+      if ($this->pagetypes[$page->type]['type'] == 'server')
+      {
+        $server = $this->pagetypes[$page->type]['server'];
+        foreach($identities as $id => $data)
+        {
+          $code = $server::getInstance($P.$id)->read();
+          if ($code) break;
+        }
+        if ($code)
+        {
+          if ($this->pagetypes[$page->type]['run'])
+            $text = $code->run($this, $params, $method);
+          else
+            $text = $code;
+        }
+        else
+        {
+          $this->popcontext();
+          return $this->launchError($context, $P, 'Error: the page '.$P.' has no code', 'Error: the block '.$P.' has no code');
+        }
+      }
+      elseif ($this->pagetypes[$page->type]['type'] == 'library')
+      {
+        $template = $language = null;
+        if ($this->pagetypes[$page->type]['template'])
+        {
+          foreach($identities as $id => $data)
+          {
+            $template = XBTemplateServer::getInstance($P.$id)->read();
+            if ($template) break;
+          }
+        }
+        if ($this->pagetypes[$page->type]['language'])
+        {
+          foreach($identities as $id => $data)
+          {
+            $language = XBLanguageServer::getInstance($P.$id)->read();
+            if ($language) break;
+          }
+        }
+
+        $uid = (strpos($P, '/') !== false)?substr($P, strrpos($P, '/')+1):$P;
+        if (!is_file($this->base->PAGESDIR.$this->base->PAGESCONTAINER."$P/$uid.lib"))
+        {
+          $this->popcontext();
+          return $this->launchError($context, $P, 'Error: the page '.$P.' has no library PHP code: '."$P/$uid.lib", 'Error: the block '.$P.' has no library PHP code: '."$P/$uid.lib");
+        }
+        include_once $this->base->PAGESDIR.$this->base->PAGESCONTAINER."$P/$uid.lib";
+        $libname = '\\'.str_replace(array('-'), '_', $uid);
+        $pagelib = new $libname($template, $language);
+        $text = $pagelib->run($this, $params, $method);
+      }
+    }
+
+
+    // we cache only if it is 200 response on main page, or always (block)
+    if ($this->base->CACHE2 && ($instance->cache == 'yes' && !$exclude && (($this->base->HTTPResponse->getResponseCode() == 200 && $context === null) || $context)))
+    {
+      // calculate cache ID
+      $cacheid = $this->getCacheID($instance->cachevariables);
+      $cache = XBCacheServer::getInstance($cacheid)->write(array('data' => $text, 'response' => $this->base->HTTPResponse->save(), 'context' => serialize($this->currentcontext), 'maincontext' => serialize($this->maincontext)));
+    }
+
+    // check templates and get templates
+    if (isset($page->template) && $page->template)
+    {
+      $fathertemplate = $this->run($page->template, 2);
+      if (is_array($text))
+      {
+        foreach($text as $k => $block)
+          $fathertemplate = str_replace("[[CONTENT,{$k}]]", $block, $fathertemplate);
+        $text = $fathertemplate;
+      }
+      else
+        $text = str_replace("[[CONTENT]]", $text, $fathertemplate);
+    }
+    
+    // we cache only if it is 200 response on main page, or always (block)
+    if ($this->base->CACHE2 && ($instance->cache == 'full' && !$exclude && (($this->base->HTTPResponse->getResponseCode() == 200 && $context === null) || $context)))
+    {
+      // calculate cache ID
+      $cacheid = $this->getCacheID($instance->cachevariables);
+      $cache = XBCacheServer::getInstance($cacheid)->write(array('data' => $text, 'response' => $this->base->HTTPResponse->save(), 'context' => serialize($this->currentcontext), 'maincontext' => serialize($this->maincontext)));
+    }
+
+    $this->popcontext();
+    return $text;
+  }
+
+  private function pushcontext($context, $originalP, $P, $page, $instance, $params, $version, $language)
+  {
+    array_unshift($this->historycontext, $this->currentcontext);
+    $this->currentcontext = array('originalpageid' => $originalP, 'pageid' => $P, 'page' => $page, 'instance' => $instance, 'params' => $params, 'version' => $version, 'language' => $language);
+    if (!$this->maincontext)
+      $this->maincontext = $this->currentcontext;
+  }
+
+  private function popcontext()
+  {
+    $this->currentcontext = array_shift($this->historycontext);
+  }
+
+  private function isAvailable($page, $context)
+  {
+    if (!$page || !isset($page->status) || !$page->status || $page->status == 'hidden')
+      return false;
+  
+    // common checks
+    switch($context)
+    {
+      case 1:
+      case 2:
+        if ($page->status == 'template' || $page->status == 'published' || $page->status == 'block')
+          return true;
+        break;
+      default:
+        if ($page->status == 'published')
+          return true;
+        break;
+        
+    }
+    return false;
+  }
+
+  private function getCacheID($variables)
+  {
+    $append = '';
+    if ($variables)
+    {
+      $xvariables = explode(',', $variables);
+      foreach($xvariables as $var)
+      {
+        $d = $this->base->HTTPRequest->getParameter($var);
+        $append .= '.' . $var . '_' . $d;
+      }
+    }
+  
+    $skin = $this->base->SKIN?'.'.$this->base->SKIN:'';
+    return $this->currentcontext['originalpageid'] . $skin . '.' . $this->currentcontext['version'] . '.' . $this->currentcontext['language'] . $append;
+  }
+  
+  private function launchError($context, $page, $pagemessage, $blockmessage)
+  {
+    if (!$context)
+    { 
+      if ($page != $this->base->errorpage)
+        return $this->run($this->base->errorpage, null, array($page, $pagemessage));
+      throw new \throwables\XambooError('Error: the page '.$this->base->errorpage.' does not exist');
+    }
+    if ($context && $page != $this->base->errorblock)
+      return $this->run($this->base->errorblock, 1, array($page, $blockmessage));
+    throw new \throwables\XambooError('Error: the block '.$this->base->errorblock.' does not exist');
+  }
+  
+}
+
+?>

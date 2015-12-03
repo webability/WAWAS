@@ -3,7 +3,7 @@
 /*
     WADebug.lib, DomCore, the WebAbility(r) Core System
     Contains the semi static object to give debug capabilities to all classes
-    (c) 2008-2010 Philippe Thomassigny
+    (c) 2008-2012 Philippe Thomassigny
 
     This file is part of DomCore
 
@@ -19,13 +19,16 @@
 
     You should have received a copy of the GNU General Public License
     along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+    
+    Changes:
+    2015-06-09: Phil, add self::$debug to null, to protect the setDebug if used before the first instanciation
 */
 
 /* @UML_Box
 |------------------------------------------------------------------|
 | WADebug: Debug object for all WA objects and instances           |
 |------------------------------------------------------------------|
-| ! VERSION : version string                               |
+| ! VERSION : version string                                       |
 | ! SYSTEM : 1                                                     |
 | ! INFO : 2                                                       |
 | ! USER : 3                                                       |
@@ -34,7 +37,7 @@
 | ! FILEREDIR : 3                                                  |
 | ! WINDOWS : 1                                                    |
 | ! UNIX : 2                                                       |
-| ! MAC : 3                                                        |
+| ! MAX : 3                                                        |
 | - ::numtotalinstances : integer                                  |
 | - ::numinstances : array                                         |
 | - uidinstance : integer                                          |
@@ -77,10 +80,12 @@
 |------------------------------------------------------------------|
 @End_UML_Box */
 
+namespace core;
+
 class WADebug
 {
-  // Dominion version
-  const VERSION = '1.00.12';
+  // DomCore version
+  const VERSION = '3.0.1';
 
   // All the functions entry
   const SYSTEM = 1;
@@ -119,7 +124,7 @@ class WADebug
   // if we are on a text or html API
   protected static $htmlapi = null;
   // Debug flag: true = log, false = ignore debug, for ALL application
-  protected static $debug = false;
+  protected static $debug = null;
   // Debug flag: true = log, false = ignore debug, for THIS instance only
   protected $localdebug = false;
 
@@ -135,12 +140,13 @@ class WADebug
   // set to true once initialized (i.e. static variables calculated)
   private static $init = false;
 
-  // Main constructor: set the classname and debug status, based on defined WADOMINION
+  // Main constructor: set the classname and debug status, based on defined WADEBUG
   public function __construct()
   {
     if (!self::$init)
     {
-      if (defined('WADEBUG'))
+      // we protect setDebug if set before calling the first instance
+      if (defined('WADEBUG') && self::$debug === null)
         self::$debug = WADEBUG;
       self::getHTMLAPI();
       self::getOSType();
@@ -266,6 +272,19 @@ class WADebug
 
     if ((self::$debug || $this->localdebug) && $level >= self::$level)
     {
+      $args = null;
+      if (func_num_args() > 2)
+      {
+        $args = func_get_args();
+        unset($args[1]);
+        unset($args[0]);
+      }
+      if (is_array($args))
+      {
+        $num = 1;
+        foreach($args as $arg)
+          $message = str_replace('%', $this->__getValue($arg), $message);
+      }
       if (self::$filter && stripos($message, self::$filter) === false)
         return;
       switch(self::$redirect)
@@ -318,6 +337,8 @@ class WADebug
 
   protected function __getValue($val, $indent = 0, $ignore = array())
   {
+    if (is_object($val) && $val instanceOf WABase)
+      return '[Base object]';
     if (is_object($val) && $val instanceOf WADebug)
     {
       return '{<br />'.PHP_EOL.$val->explain($indent+2, $ignore).str_repeat('.', $indent+2).'}';
@@ -359,7 +380,7 @@ class WADebug
       $exp .= str_repeat('.', $indent).'Debug mode is '.(self::$debug?'On':'Off').' and Local Debug is '.($this->localdebug?'On':'Off').PHP_EOL;
     }
 
-    $class = new ReflectionClass($this->getClassName());
+    $class = new \ReflectionClass($this->getClassName());
     $properties = $class->getProperties();
     foreach($properties as $prop)
     {
@@ -390,9 +411,9 @@ class WADebug
       if ($access)
       {
         if ($prop->isStatic())
-          $exp .= ' = '; //. $this->__getValue(self::$$name, $indent, $ignore);
+          $exp .= ' = ' . $this->__getValue(self::$$name, $indent, $ignore);
         else
-          $exp .= ' = '; // . $this->__getValue($this->$name, $indent, $ignore);
+          $exp .= ' = ' . $this->__getValue($this->$name, $indent, $ignore);
       }
       else
       {

@@ -1,0 +1,89 @@
+<?php
+
+/*
+    Factory.lib, DomCore, the WebAbility(r) Core System
+    Contains the Factory pattern class
+    (c) 2008-2012 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| Factory : Factory pattern                                        |
+|------------------------------------------------------------------|
+| - $catalog: array                                                |
+|------------------------------------------------------------------|
+| + new Factory($defaultcatalog: array)                            |
+| + newProduct($parameter: mixed[, $arg, $arg, ...])               |
+| + registerProduct($id: mixed, $class: string)                    |
+| + unregisterProduct($id: mixed)                                  |
+| # classLoader($class: string)                                    |
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace patterns;
+
+class Factory extends \core\WAObject
+{
+  private $catalog = array();
+
+  public function __construct($default = null)
+  {
+    parent::__construct();
+    if ($default)
+      $this->catalog = $default;
+  }
+
+  public function newProduct($parameter)
+  {
+    if (isset($this->catalog[$parameter]))
+    {
+      // we load/include the class if needed (user overloaded)
+      if (!class_exists($this->catalog[$parameter]))
+      {
+        $this->classLoader($this->catalog[$parameter]);
+      }
+      // We create new instante with parameters
+      $args = func_get_args();
+      array_shift($args);
+      $reflection = new \ReflectionClass($this->catalog[$parameter]);
+      $instance = call_user_func_array(array(&$reflection, 'newInstance'), $args);
+      return $instance;
+    }
+    return null;
+  }
+
+  public function registerProduct($id, $class)
+  {
+    $this->catalog[$id] = $class;
+  }
+
+  public function unregisterProduct($id)
+  {
+    if (isset($this->catalog[$id]))
+      unset($this->catalog[$id]);
+  }
+
+  protected function classLoader($class)
+  {
+    // nothing by default, we relay on __autoload()
+    // If you use not-so-easily accessible classes, please overload this method in your extended factory
+  }
+
+}
+
+?>

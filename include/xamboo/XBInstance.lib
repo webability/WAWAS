@@ -1,0 +1,187 @@
+<?php
+
+/* @DESCR -- Do not edit
+
+XBInstance.lib, Xamboo
+Contains the basic class to contains a page object instance
+(c) 2012 Philippe Thomassigny
+
+This file is part of Xamboo
+
+Xamboo is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Xamboo is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Xamboo.  If not, see <http://www.gnu.org/licenses/>.
+
+Creation: 2012-09-23
+Changes:
+  2015-04-21 Phil: documentation, comments
+
+@End_DESCR */
+
+/* @UML_Box
+|------------------------------------------------------------------|
+| XBInstance:                                                      |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace xamboo;
+
+class XBInstance extends \core\WAClass implements \ArrayAccess, \Iterator, \Countable
+{
+  protected $entries = array();
+
+  public function __construct($data)
+  {
+    parent::__construct();
+    if (is_string($data))
+    { // data buffer
+      $this->entries = XBInstance::compile($data);
+    }
+    else if (is_array($data))
+    {
+      if (isset($data['entries']))
+        $this->entries = $data['entries'];
+    }
+  }
+
+  public function __get($name)
+  {
+    if (isset($this->entries[$name]))
+      return $this->entries[$name];
+    return null;
+  }
+
+  public function __set($name, $val)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/common/XBInstance->__set( $name, $val )", WADebug::SYSTEM);
+
+    $this->entries[$name] = $val;
+    return $this;
+  }
+
+  public function __isset($name)
+  {
+    return isset($this->entries[$name]);
+  }
+
+  public function __unset($name)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/common/XBInstance->__unset( $name )", WADebug::SYSTEM);
+
+    unset($this->entries[$name]);
+  }
+
+  // ArrayAccess implemented
+  public function offsetSet($offset, $value)
+  {
+    if ($offset)
+      $this->entries[$offset] = $value;
+  }
+
+  public function offsetExists($offset)
+  {
+    return isset($this->entries[$offset]);
+  }
+
+  public function offsetUnset($offset)
+  {
+    unset($this->entries[$offset]);
+  }
+
+  public function offsetGet($offset)
+  {
+    return isset($this->entries[$offset]) ? $this->entries[$offset] : null;
+  }
+
+  // Iterator implemented
+  public function rewind()
+  {
+    reset($this->entries);
+  }
+
+  public function current()
+  {
+    return current($this->entries);
+  }
+
+  public function key()
+  {
+    return key($this->entries);
+  }
+
+  public function next()
+  {
+    return next($this->entries);
+  }
+
+  public function valid()
+  {
+    return current($this->entries) !== false;
+  }
+
+  // Countable implemented
+  public function count()
+  {
+    return count($this->entries);
+  }
+
+  // Own array get/set
+  public function getArray()
+  {
+    return $this->entries;
+  }
+
+  public function setArray($array)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/common/XBInstance->setArray( $array )", WADebug::SYSTEM);
+
+    foreach($array as $k => $v)
+      $this->entries[$k] = $v;
+    return $this;
+  }
+
+  protected function serial(&$data)
+  {
+    $data['entries'] = $this->entries;
+  }
+
+  protected function unserial($data)
+  {
+    $this->entries = $data['entries'];
+  }
+
+  public function __toString()
+  {
+    return XBInstance::create($this->entries);
+  }
+
+  static function compile($data)
+  {
+    return XBCompiler::compileLines($data);
+  }
+  
+  static function create($data)
+  {
+    $text = '';
+    foreach($data as $k => $v)
+      $text .= $k . '=' . $v . "\n";
+    return $text;
+  }
+
+}
+
+?>

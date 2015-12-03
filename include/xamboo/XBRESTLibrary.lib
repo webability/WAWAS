@@ -1,0 +1,101 @@
+<?php
+
+/*
+XBRESTLibrary.lib, Xamboo
+Contains the basic class to contains a REST page object instance
+(c) 2012 Philippe Thomassigny
+
+This file is part of Xamboo
+
+Xamboo is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Xamboo is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Xamboo.  If not, see <http://www.gnu.org/licenses/>.
+
+Creation: 2012-09-23
+Changes:
+  2015-04-21 Phil: documentation, comments
+
+*/
+
+/* @UML_Box
+|------------------------------------------------------------------|
+| XBRESTLibrary: REST library object                               |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+| + new XBRESTLibrary($template, $language)                        |
+| + __toString(): string                                           |
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace xamboo;
+
+// Class to manage a page object
+class XBRESTLibrary extends \core\WAObject
+{
+  protected $template;
+  protected $language;
+
+  public function __construct($template, $language)
+  {
+    parent::__construct();
+    $this->template = $template;
+    $this->language = $language;
+  }
+
+  public function run($engine, $params, $method)
+  {
+    switch($method)
+    {
+      case 'GET': return $this->get($engine, $params);
+      case 'PUT': return $this->put($engine, $params);
+      case 'POST': return $this->post($engine, $params);
+      case 'DELETE': return $this->delete($engine, $params);
+    }
+    return 'Método no soportado';
+  }
+
+  public function get($engine, $params)
+  {
+    if ($this->template instanceof WATemplate)
+      return $this->template->resolve();
+    return $this->error(501, 'Método GET no disponible.');
+  }
+
+  public function post($engine, $params)
+  {
+    return $this->error(501, 'Método POST no disponible.');
+  }
+
+  public function put($engine, $params)
+  {
+    return $this->error(501, 'Método PUT no disponible.');
+  }
+
+  public function delete($engine, $params)
+  {
+    return $this->error(501, 'Método DELETE no disponible.');
+  }
+
+  public function error($error, $mensaje)
+  {
+    $this->base->HTTPResponse->setResponseCode($error);
+    return json_encode(array('Error' => $error, 'Mensaje' => $mensaje));
+  }
+  
+  public function __toString()
+  {
+    return "Library";
+  }
+
+}
+
+?>

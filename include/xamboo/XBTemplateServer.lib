@@ -1,0 +1,80 @@
+<?php
+
+/* @DESCR -- Do not edit
+
+XBTemplateServer.lib, Xamboo
+Main Templates Server: load and dispatch template pages
+(c) 2015 Philippe Thomassigny
+
+This file is part of Xamboo
+
+Xamboo is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Xamboo is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Xamboo.  If not, see <http://www.gnu.org/licenses/>.
+
+Creation: 2012-09-23
+Changes:
+  2015-04-20 Phil: I added the support for CACHE1 config parameter
+  2015-04-21 Phil: documentation, comments
+  2015-04-22 Phil: class renamed and history supper added
+
+@End_DESCR */
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| XBTemplateServer : Main Pages Server: load and dispatch pages definition |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace xamboo;
+
+class XBTemplateServer extends \patterns\Multiton
+{
+  private $template = null;
+
+  public function __construct($id)
+  {
+    parent::__construct($id);
+
+    // Separate page path from page id
+    $uid = (strpos($id, '/') !== false)?substr($id, strrpos($id, '/')+1):$id;
+    // $uid is <pageid>.<version>.<language>
+    $path = strtok($id, '.');
+    
+    if (!is_file($this->base->PAGESDIR.$this->base->PAGESCONTAINER . '/' . $path . '/' . $uid . '.template'))
+      return;
+    $this->template = new \datasources\XBTemplateSource(
+      new \datasources\FileSource($this->base->PAGESDIR, $this->base->PAGESCONTAINER . '/'. $path .'/', $uid . '.template'),
+      $this->base->CACHE1?new FastObjectSource(
+        new \datasources\FileSource($this->base->CACHE1DIR, 'afo/'. $this->base->PAGESCONTAINER . '/' . $path .'/', $uid . '.template.afo', true),
+        $this->base->SHM?new \datasources\SHMSource($this->base->PAGESCONTAINER . '/' . $path . '/' . $uid . '.template.afo', $this->base->SHM):null
+        ):null,
+      $this->base->HISTORY?new \datasources\FileSource($this->base->HISTORYDIR, 'history/'. $this->base->PAGESCONTAINER . '/' . $path . '/', $uid . '.template', true):null
+      );
+  }
+  
+  public function read()
+  {
+    if ($this->template)
+    {
+      $t = $this->template->read();
+      if ($t instanceof \core\WATemplate)
+        return $t->getClone();
+    }
+    return null;
+  }
+
+}
+
+?>

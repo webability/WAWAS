@@ -1,0 +1,85 @@
+<?php
+
+/*
+
+Reemplaza el index.php de xamboo standalone
+
+*/
+
+namespace modules;
+
+class ModuleXamboo extends Module
+{
+  private $config;
+
+  function __construct($config)
+  {
+    parent::__construct($config);
+    // Register hook to process requests
+//    $protocol->registerHook('process', $this->name, "process");
+  }
+
+  public function process($context) // $host, $request, $response)
+  {
+    $this->hits++;
+    try
+    {
+      $BASE_P = null;
+      $URI = strtolower($context->request->http['request']);
+      if ($URI)
+      {
+        // Remove query part (already managed by PHP)
+        if (strpos($URI, '?'))
+        {
+          $URI = substr($URI, 0, strpos($URI, '?'));
+        }
+        if (substr($URI, -1) == '/' && strlen($URI) > 1)
+        {
+          // NO ACEPTAMOS URLS QUE TERMINAN CON /, REDIRECCIONAMOS !!
+          $URI = substr($URI, 0, -1);
+//          header('HTTP/1.1 301 Moved Permanently');
+//          header('Location: ' . $URI . $QUERY);
+//          return;
+        }
+        if (strlen($URI) > 1)
+          $BASE_P = $URI;
+      }
+
+      $baseobject = $context->host->config->xamboo->baseobject;
+      $configfile = $context->host->config->xamboo->configfile;
+      $config = new \xconfig\XConfig(file_get_contents($configfile));
+
+      // setup config
+      if (\common\Base::hasInstance())
+        $base = $baseobject::getInstance();
+      else
+        $base = new $baseobject($config, $context);
+      
+      // call engine
+      $engine = new \xamboo\engine($URI);
+      // $engine->SKIN = 'myskin';
+      $data = $engine->run($BASE_P);
+      
+      $data = $base->postrun($data);
+      
+      $context->response->body = $data;
+      $context->response->setHeader('Date', date ("r", time()));
+      $context->response->setHeader('Content-Length', strlen($context->response->body));
+      
+      $context->response->setHeader('Content-Type', 'text/html');
+    }
+    catch (\Error $t)
+    {
+      $data = 'Error interno: ' . $t;
+      $context->response->body = nl2br($data);
+      $context->response->setHeader('Date', date ("r", time()));
+      $context->response->setHeader('Content-Length', strlen($context->response->body));
+      
+      $context->response->setHeader('Content-Type', 'text/html');
+    }
+    return true;
+  }
+
+}
+
+?>

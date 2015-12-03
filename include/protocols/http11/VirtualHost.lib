@@ -1,0 +1,45 @@
+<?php
+
+namespace protocols\http11;
+
+final class VirtualHost extends \Threaded
+{
+  public $config;
+  public $listener;
+  public $documentroot;
+  public $directoryindex;
+  public $modules;
+  
+  private $errors = array();
+
+  function __construct($localconfig, $default)
+  {
+    $this->config = $localconfig;
+    
+    $this->listener = $localconfig->listener?:$default->listener;
+    $this->documentroot = $localconfig->documentroot?:$default->documentroot;
+    $this->directoryindex = $localconfig->directoryindex?:$default->directoryindex;
+    $this->hostnames = $localconfig->hostname;
+
+    // Make hostnames absolute (name:port)
+    foreach($this->hostnames as $k => $hostname)
+    {
+      // port of listener
+      if (strpos($hostname, ':') === false)
+        $this->hostnames[$k] = $hostname . ':80';
+    }
+    
+    $this->modules = $localconfig['module'];
+    
+    // extract the error codes
+    if ($localconfig['error'])
+    {
+      foreach($localconfig['error'] as $error)
+      {
+        $this->errors[$error['code']] = array('message' => $error['message'], 'template' => $error['template']);
+      }
+    }
+  }
+}
+
+?>

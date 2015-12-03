@@ -1,0 +1,74 @@
+<?php
+
+/*
+    Dispatcher.lib, DomCore, the WebAbility(r) Core System
+    Contains the Factory pattern class
+    (c) 2008-2012 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| Dispatcher : Dispatcher pattern                                  |
+|------------------------------------------------------------------|
+| - $entries: array                                                |
+|------------------------------------------------------------------|
+| + new Dispatcher($defaultentries: array)                         |
+| + dispatch($parameter: mixed[, $arg, $arg, ...])                 |
+| + registerEntry($id: mixed, $function: string)                   |
+| + unregisterEntry($id: mixed)                                    |
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+
+class Dispatcher extends WAObject
+{
+  private $entries = array();
+
+  public function __construct($default = null)
+  {
+    parent::__construct();
+    if ($default)
+      $this->entries = $default;
+  }
+
+  public function dispatch($parameter)
+  {
+    if (!isset($this->entries[$parameter]))
+      throw new PatternError(\core\WAMessage::getMessage('Dispatcher.noentry').get_class($this));
+    if (!method_exists($this, $this->entries[$parameter]))
+      throw new PatternError(\core\WAMessage::getMessage('Dispatcher.nofunction').get_class($this).'->'.$this->entries[$parameter]);
+    
+    $args = func_get_args();
+    array_shift($args);
+    return call_user_func_array(array($this, $this->entries[$parameter]), $args);
+  }
+
+  public function registerEntry($id, $function)
+  {
+    $this->entries[$id] = $function;
+  }
+
+  public function unregisterEntry($id)
+  {
+    if (isset($this->entries[$id]))
+      unset($this->entries[$id]);
+  }
+
+}
+
+?>

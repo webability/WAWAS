@@ -1,0 +1,85 @@
+<?php
+
+/*
+XBLanguageSource.lib, Xamboo
+Library to read, compile and use a language definition file for Xamboo
+(c) 2015 Philippe Thomassigny
+
+This file is part of Xamboo
+
+Xamboo is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Xamboo is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Xamboo.  If not, see <http://www.gnu.org/licenses/>.
+
+Creation: 2012-09-23
+Changes:
+  2015-04-22 Phil: Separation from LanguageSource to add history functionality
+
+*/
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| XBLanguageSource : Language 3-level access object                  |
+|------------------------------------------------------------------|
+| # originsource : DataSource extended object                      |
+| # fastobjectsource : FastObjectSource extended object            |
+| # loaded : boolean                                               |
+| - tm1 : timestamp of originsource                                |
+| - tm2 : timestamp of fastobjectsource                            |
+|------------------------------------------------------------------|
+| + new LanguageSource($originsource: DataSource, $fastobjectsource: FastObjectSource) |
+| + isValid() : boolean                                            |
+| + getTimestamp() : integer                                       |
+| + read() : mixed                                                 |
+| + write($data: mixed) : void                                     |
+| + unlink() : void                                                |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace datasources;
+
+class XBLanguageSource extends LanguageSource
+{
+  protected $historysource = null;
+
+  public function __construct($originsource, $fastobjectsource = null, $historysource = null)
+  {
+    parent::__construct($originsource, $fastobjectsource);
+
+    $this->historysource = $historysource;
+  }
+
+  public function read()
+  {
+    parent::read();
+    
+    // We check against history, if origin is newer than history
+    if ($this->historysource && $this->historysource->getTimeStamp() < $this->tm1)
+    {
+      // read the source and write to history
+      $this->makeHistory();
+    }
+    
+    return $this->data;
+  }
+
+  public function makeHistory()
+  {
+    $this->historysource->write(microtime(true));
+    $f = new FileSource($this->base->HISTORYDIR, $this->historysource->getPath(), $this->historysource->getFilename() . '.' . time(), true);
+    $f->write($this->originsource->read());
+  }
+  
+}
+
+?>

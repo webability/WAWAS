@@ -1,0 +1,88 @@
+<?php
+
+namespace modules;
+
+/*
+  Possible Hooks for any modules:
+
+  GLOBAL:
+  x init          Happens before main server infinite loop.
+                  Usefull to init logs, config, admin components if not done into constructor
+  x loop          Happens on every main server loop. (approx 1000 times per second on empty use). 
+                  Usefull for stats logs and admin components
+  x shutdown      Happens after main server infinite loop when normal shutdown happens.
+                  Usefull to finish logs, config, admin components if not done into eventual destructor
+                  
+  THREAD:
+  x start         Happens when the thread is started (local thread initialization)
+  
+  x receivedata   Happens when the client receive any data no matter what it is, no matter the protocol
+  x senddata      Happens when the client sends any data no matter what it is, no matter the protocol
+  x header        Happens when the Protocol have found a fully well formed header/request.
+  x loading       Happens when we receive a PART of the body/request, but it is not complete yet. 
+                  Any protocol should implement this hook to notify a % of loading
+  x process       Happens when the Protocol need the calculation of the response based on the request,
+                  once 100% of the request has been received. Any protocol should implement this hook.
+                  When a module have calculated a response, other modules *should not* calculate a response.
+  x stop          Happens when the thread is terminated normally. An abnormal shutdown will not call this.
+  
+*/
+
+// A module is a contextual PIPE, it does NOT stock any data or information locally, but transforms the context
+
+class Module extends \Threaded
+{
+  public $hits = 0;
+  public $name;
+
+  public function __construct($config)
+  {
+    // use the config to build module-specific config data
+    // The hooks are linked with the protocol and the server/clients
+    // Every hook correspond to a method in this library.
+    $this->name = $config->name;
+  }
+  
+  // The init method called once at the beginning of the server
+  public function init($modules, $protocols, $listeners) {}
+  
+  // The loop method is informative only for the module called each loop
+  public function loop($counter) {}
+
+  // The shutdown method is informative only for the module called at the end of the server
+  public function shutdown() {}
+  
+  
+  // The start method is informative only for the module called at the beginning of the client
+  public function start($context) {}
+
+  // The receivedata method is informative only for the module and should not modify the context.
+  public function receivedata($context, $input) {}
+
+  // The senddata method is informative only for the module and should not modify the context.
+  public function senddata($context, $output) {}
+
+  // The header method is informative only for the module and should not modify the context.
+  public function header($context)
+  {}
+
+  // The loading method returns TRUE if modified context or FALSE if the context is not usefull for our module
+  public function loading($context)
+  {
+    return false;
+  }
+
+  // The process method returns TRUE if modified context, or FALSE if the context is not usefull for our module
+  // returning true means "I processed the information, stop here". 
+  // Modules are gready and only ONE module can process the information (the first to catch it)
+  public function process($context)
+  {
+    return false;
+  }
+  
+  // The stop method is informative only for the module called at the end of the client
+  public function stop($context) {}
+
+}
+
+?>

@@ -2,8 +2,8 @@
 
 /*
     WALanguage.lib, DomCore, the WebAbility(r) Core System
-    Contains the basic class to compile and XML language file to a readable PHP array
-    (c) 2008-2010 Philippe Thomassigny
+    Contains the basic class to contains a language table
+    (c) 2008-2012 Philippe Thomassigny
 
     This file is part of DomCore
 
@@ -23,80 +23,145 @@
 
 /* @UML_Box
 |------------------------------------------------------------------|
-| WALanguage: XML language reader                                  |
+| WALanguage: Language table                                       |
 |------------------------------------------------------------------|
+| # id: string                                                     |
+| # lang: boolean                                                  |
+| # entries: Array(id => string)                                   |
 |------------------------------------------------------------------|
-| + ::compile($buffer: XML string): Array(string)                  |
-| - ::convert($xml: XMLNode): Array                                |
-| + ::create($id: string, $lang: string, $data: array of langs): string |
+| + new WALanguage($data, $id = null, $lang = null)                |
+| + getId(): string                                                |
+| + getLang(): string                                              |
+| + getEntry($id: string): string                                  |
+| + delEntry($id: string): void                                    |
+| + setEntry($id: string, $data: string): void                     |
+| + rewind(): void                                                 |
+| + current(): string                                              |
+| + key(): string                                                  |
+| + next(): string                                                 |
+| + valid(): boolean                                               |
+| # serial($data: array): void                                     |
+| # unserial($data: array): void                                   |
+| + __toString(): string                                           |
 |------------------------------------------------------------------|
 @End_UML_Box */
 
-// Static class to compile language XML file
-class WALanguage
+namespace core;
+
+// Class to manage language table
+class WALanguage extends WAClass implements \Iterator
 {
-  public static $id;
-  public static $lang;
+  protected $id = '';
+  protected $lang = '';
+  protected $entries = array();
 
-  public static function compile($buffer)
+  public function __construct($data, $id = null, $lang = null)
   {
-    $id = ''; $lang = '';
-    $TM = array();
-    if (strpos($buffer, '<?xml') !== false)
-    {
-      $xml = simplexml_load_string($buffer);
-      $tree = self::convert($xml);
-      if (isset($tree['tag']) && $tree['tag'] === 'language')
-      {
-        self::$id = $tree['attributes']['id'];
-        self::$lang = $tree['attributes']['lang'];
-        foreach ($tree as $k => $value)
-        {
-          if ($k === 'tag' || $k === 'attributes')
-            continue;
-          $TM[$value['attributes']['id']] = $value['data'];
-        }
-      }
+    parent::__construct();
+
+    if (is_string($data))
+    { // XML buffer
+      $this->entries = WALanguageCompiler::compile($data);
+      $this->id = WALanguageCompiler::$id;
+      $this->lang = WALanguageCompiler::$lang;
     }
-    return $TM;
+    else if (is_array($data))
+    {
+      if (isset($data['id']))
+        $this->id = $data['id'];
+      else
+        $this->id = $id;
+      if (isset($data['lang']))
+        $this->lang = $data['lang'];
+      else
+        $this->lang = $lang;
+      if (isset($data['entries']))
+        $this->entries = $data['entries'];
+    }
   }
 
-  private static function convert($xml)
+  public function getId()
   {
-    if (!($xml instanceof SimpleXMLElement))
-      return $xml;
-
-    $nodename = $xml->getName();
-    $node = array('tag' => $nodename);
-
-    // 1. the attributes
-    foreach ($xml->attributes() as $name => $value)
-    {
-      $node['attributes'][$name] = (string)$value;
-    }
-
-    // 2. the children
-    foreach ($xml->children() as $name => $value)
-    {
-      $node[] = self::convert($value);
-    }
-
-    // 3. the content data
-    $data = trim((string)$xml);
-    if ($data)
-      $node['data'] = $data;
-
-    return $node;
+    return $this->id;
   }
 
-  public static function create($id, $language, $data)
+  public function getLang()
   {
-    $text = '<?xml version="1.0" encoding="UTF-8" ?>'.PHP_EOL.
-            '<language id="'.$id.'" lang="'.$language.'">'.PHP_EOL;
-    foreach ($data as $id => $val)
-      $text .= '  <entry id="'.$id.'"><![CDATA['.$val.']]></entry>'.PHP_EOL;
-    $text .= '</language>'.PHP_EOL;
-    return $text;
+    return $this->lang;
+  }
+
+  // ads or modify an entry
+  public function setEntry($id, $data)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/core/WALanguage->setEntry(%, %)", WADebug::SYSTEM, $id, $data);
+
+    $this->entries[$id] = $data;
+  }
+
+  // delete an entry
+  public function delEntry($id)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("include/core/WALanguage->delEntry(%)", WADebug::SYSTEM, $id);
+
+    if (isset($this->entries[$id]))
+    {
+      unset($this->entries[$id]);
+    }
+  }
+
+  // get only 1 entry
+  public function getEntry($id)
+  {
+    if (isset($this->entries[$id]))
+      return $this->entries[$id];
+    return $id;
+  }
+
+  // Iterator implemented
+  public function rewind()
+  {
+    reset($this->entries);
+  }
+
+  public function current()
+  {
+    return current($this->entries);
+  }
+
+  public function key()
+  {
+    return key($this->entries);
+  }
+
+  public function next()
+  {
+    return next($this->entries);
+  }
+
+  public function valid()
+  {
+    return key($this->entries) !== null;
+  }
+
+  protected function serial(&$data)
+  {
+    $data['id'] = $this->id;
+    $data['lang'] = $this->lang;
+    $data['entries'] = $this->entries;
+  }
+
+  protected function unserial($data)
+  {
+    $this->id = $data['id'];
+    $this->lang = $data['lang'];
+    $this->entries = $data['entries'];
+  }
+
+  public function __toString()
+  {
+    return WALanguageCompiler::create($this->id, $this->lang, $this->entries);
   }
 
 }

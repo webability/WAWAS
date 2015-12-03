@@ -1,0 +1,75 @@
+<?php
+
+/* @DESCR -- Do not edit
+
+XBCodeServer.lib, Xamboo
+Main Code Server: load and dispatch code pages
+(c) 2015 Philippe Thomassigny
+
+This file is part of Xamboo
+
+Xamboo is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Xamboo is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Xamboo.  If not, see <http://www.gnu.org/licenses/>.
+
+Creation: 2012-09-23
+Changes:
+  2015-04-20 Phil: I added the support for CACHE1 config parameter
+  2015-04-21 Phil: documentation, comments
+  2015-04-21 Phil: Library renamed and history support added
+
+@End_DESCR */
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| CodeServer : Main Pages Server: load and dispatch pages definition |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace xamboo;
+
+class XBCodeServer extends \patterns\Multiton
+{
+  private $code = null;
+
+  public function __construct($id)
+  {
+    parent::__construct($id);
+
+    // Separate page path from page id
+    $uid = (strpos($id, '/') !== false)?substr($id, strrpos($id, '/')+1):$id;
+    // $uid is <pageid>.<version>.<language>
+    $path = strtok($id, '.');
+
+    if (!is_file($this->base->PAGESDIR.$this->base->PAGESCONTAINER . '/' . $path . '/' . $uid . '.code'))
+      return;
+    $this->code = new \datasources\XBCodeSource(
+      new \datasources\FileSource($this->base->PAGESDIR, $this->base->PAGESCONTAINER . '/'. $path .'/', $uid . '.code'),
+      $this->base->CACHE1?new \datasources\FastObjectSource(
+        new \datasources\FileSource($this->base->CACHE1DIR, 'afo/'. $this->base->PAGESCONTAINER . '/' . $path .'/', $uid . '.code.afo', true),
+        $this->base->SHM?new \datasources\SHMSource($this->base->PAGESCONTAINER . '/' . $path . '/' . $uid . '.code.afo', $this->base->SHM):null
+        ):null,
+      $this->base->HISTORY?new \datasources\FileSource($this->base->HISTORYDIR, 'history/'. $this->base->PAGESCONTAINER . '/' . $path . '/', $uid . '.code', true):null
+      );
+  }
+  
+  public function read()
+  {
+    if ($this->code)
+      return $this->code->read();
+    return null;
+  }
+}
+
+?>

@@ -3,7 +3,7 @@
 /*
     WASHM.lib, DomCore, the WebAbility(r) Core System
     Contains the shared memory manager class to access resident memory variables
-    (c) 2008-2011 Philippe Thomassigny
+    (c) 2008-2012 Philippe Thomassigny
 
     This file is part of DomCore
 
@@ -25,8 +25,6 @@
 |------------------------------------------------------------------|
 | SHM : Shared Memory static object                                |
 |------------------------------------------------------------------|
-| - ::init : boolean                                               |
-| - ::messages : array(string => string)                           |
 | - size : integer                                                 |
 | - memid : integer                                                |
 | - shm : resource                                                 |
@@ -54,53 +52,68 @@
 |------------------------------------------------------------------|
 @End_UML_Box */
 
+/*
+  2015-11-16: Phil, Rewrite the library to be fast, use implicit var mapper and only give support for files (for AFO cache files from datasources). The variables mapper is still available but under specific conditions and optinos.
+*/
+
+namespace core;
+
 class WASHM extends WADebug
 {
-  private static $init = false;
-  private static $messages = array(
-    'WASHM.nosharedmemory' => 'There is no available shared memory',
-    'WASHM.noattach' => 'We could not attach to our shared memory'
-  );
-
   private $size = 20971520; // 20 MB by default (1024*1024*20)
-  private $memid = 10010;   // our version by default, arbitrary value
+  private $memid = 10010;   // our main memory ID by default, arbitrary value
+                            // The memid will contain the IPC to the main vars pointer
+  private $mapped = false;  // If we keep our data mapped into SHM. This is SLOW but portable, and we can control the occupied/free memory
+  private $project = null;  // the project for ftok if we dont use mapped
   private $shm = null;      // our shared memory segment resource pointer
+  private $seg = null;      // our semaphore to protect access concurrency
 
-  public function __construct($size = null, $memid = null)
+  public function __construct($size = null, $memid = null, $project = false)
   {
-    if (!self::$init)
-    {
-      // send messages to WAMessage
-      WAMessage::addMessages(self::$messages);
-      self::$init = true;
-    }
-
     parent::__construct();
 
     if (self::$debug || $this->localdebug)
-      $this->doDebug("include/core/WASHM->__construct( $size, $memid )", WADebug::SYSTEM);
+      $this->doDebug("include/core/WASHM->__construct(%, %)", WADebug::SYSTEM, $size, $memid);
 
-    if (!function_exists('sem_get'))
-      throw new SHMError(WAMessage::getMessage('WASHM.nosharedmemory'));
+    if (!function_exists('shm_attach') || !function_exists('sem_get'))
+      throw new \throwables\SHMError(\core\WAMessage::getMessage('WASHM.nosharedmemory'));
 
     if ($size)
       $this->size = $size;
     if ($memid)
       $this->memid = $memid;
-    $this->start();
+    
+    $this->shm = shm_attach($this->memid, $this->size);
+    if (!$this->shm)
+      throw new \throwables\SHMError(\core\WAMessage::getMessage('WASHM.noattach'));
+    
+    if (!$project)
+    {
+      $this->mapped = true;
+      $this->start();
+    }
+    else
+      $this->project = $project;
+  }
+
+  public function __destruct()
+  {
+    shm_detach($this->shm);
+    $this->shm = null;
   }
 
   private function attach()
   {
-    $this->shm = shm_attach($this->memid, $this->size);
-    if (!$this->shm)
-      throw new SHMError(WAMessage::getMessage('WASHM.noattach'));
+    $this->seg = sem_get($this->memid, 1, 0666, -1); 
+    $res = sem_acquire($this->seg);
+    if (!$res)
+      throw new \throwables\SHMError(\core\WAMessage::getMessage('WASHM.nosemacquire'));
   }
 
   private function detach()
   {
-    shm_detach($this->shm);
-    $this->shm = null;
+    sem_release($this->seg);
+    $this->seg = null;
   }
 
   private function start()
@@ -109,23 +122,39 @@ class WASHM extends WADebug
     $this->attach();
     if (!shm_has_var($this->shm, 0))
     {
-      shm_put_var($this->shm, 0, array());
-      shm_put_var($this->shm, 1, 2);
+      // check the result
+      $res = shm_put_var($this->shm, 0, array());
+      $res &= shm_put_var($this->shm, 1, 2);
+      // throw if any error
+      if (!$res)
+        throw new \throwables\SHMError(\core\WAMessage::getMessage('WASHM.varaccess'));
     }
     $this->detach();
   }
 
   private function getlink($id, $type)
   {
+    if (!$id)
+      return null;
+    if (!$this->mapped)
+    {
+      if (is_numeric($id))
+        return $id;
+      if (!is_file($id))
+        throw new \throwables\SHMError(\core\WAMessage::getMessage('WASHM.nofile'));
+      return ftok($id, $this->project);
+    }
+    
     $links = shm_get_var($this->shm, 0);
-    if (isset($links[$id]))
+    if (is_array($links) && isset($links[$id]))
     {
       $link = $links[$id];
       if ($type == 'r') $links[$id]['r'] = microtime(true);
       if ($type == 'w') $links[$id]['w'] = microtime(true);
       if ($type == 'd') unset($links[$id]);
       if ($type)
-        shm_put_var($this->shm, 0, $links);
+        if (!shm_put_var($this->shm, 0, $links))
+          throw new \throwables\SHMError(\core\WAMessage::getMessage('WASHM.varaccess'));
       return $link;
     }
     return null;
@@ -135,14 +164,20 @@ class WASHM extends WADebug
   {
     $link = array('p' => $pointer, 'r' => null, 'w' => microtime(true));
     $links = shm_get_var($this->shm, 0);
+    if (!is_array($links))
+      throw new \throwables\SHMError(\core\WAMessage::getMessage('WASHM.varaccess'));
     $links[$id] = $link;
-    shm_put_var($this->shm, 0, $links);
+    if (!shm_put_var($this->shm, 0, $links))
+      throw new \throwables\SHMError(\core\WAMessage::getMessage('WASHM.varaccess'));
   }
 
   private function getnextpointer()
   {
     $pt = shm_get_var($this->shm, 1);
-    shm_put_var($this->shm, 1, $pt+1);
+    if (!$pt)
+      throw new \throwables\SHMError(\core\WAMessage::getMessage('WASHM.varaccess'));
+    if (!shm_put_var($this->shm, 1, $pt+1))
+      throw new \throwables\SHMError(\core\WAMessage::getMessage('WASHM.varaccess'));
     return $pt;
   }
 
@@ -150,18 +185,22 @@ class WASHM extends WADebug
   public function write($id, $data)
   {
     if (self::$debug || $this->localdebug)
-      $this->doDebug("include/core/WASHM->write( $id, $data )", WADebug::SYSTEM);
+      $this->doDebug("include/core/WASHM->write(%, %)", WADebug::SYSTEM, $id, $data);
 
     $this->attach();
     $link = $this->getlink($id, 'w');
     if ($link)
     {
-      shm_put_var($this->shm, $link['p'], $data);
+      $linkdata = $this->mapped?$link['p']:$link;
+      if (!shm_put_var($this->shm, $linkdata, $data))
+        throw new \throwables\SHMError(\core\WAMessage::getMessage('WASHM.varaccess'));
     }
     else
     {
+      // Here we can only arrive if we are mapped (getlink always give a value if we are not mapped)
       $pointer = $this->getnextpointer();
-      shm_put_var($this->shm, $pointer, $data);
+      if (!shm_put_var($this->shm, $pointer, $data))
+        throw new \throwables\SHMError(\core\WAMessage::getMessage('WASHM.varaccess'));
       $this->writelink($id, $pointer);
     }
     $this->detach();
@@ -171,13 +210,20 @@ class WASHM extends WADebug
   public function read($id)
   {
     if (self::$debug || $this->localdebug)
-      $this->doDebug("include/core/WASHM->read( $id )", WADebug::SYSTEM);
+      $this->doDebug("include/core/WASHM->read(%)", WADebug::SYSTEM, $id);
 
     $this->attach();
     $var = null;
     $link = $this->getlink($id, 'r');
+    // The autoload is more likely going to send an exception if the shm serialized class cannot be found, warnings are not annoying, @ removed
     if ($link)
-      $var = shm_get_var($this->shm, $link['p']);
+    {
+      $linkdata = $this->mapped?$link['p']:$link;
+      // maybe there is nothing in memory for this ID
+      $var = @shm_get_var($this->shm, $linkdata);
+      if (!$var)
+        $var = null;
+    }
     $this->detach();
     return $var;
   }
@@ -186,20 +232,26 @@ class WASHM extends WADebug
   public function delete($id)
   {
     if (self::$debug || $this->localdebug)
-      $this->doDebug("include/core/WASHM->delete( $id )", WADebug::SYSTEM);
+      $this->doDebug("include/core/WASHM->delete(%)", WADebug::SYSTEM, $id);
 
     $this->attach();
     $link = $this->getlink($id, 'd');
     if ($link)
-      $var = shm_remove_var($this->shm, $link['p']);
+    {
+      $linkdata = $this->mapped?$link['p']:$link;
+      $var = shm_remove_var($this->shm, $linkdata);
+      if (!$var)
+        throw new \throwables\SHMError(\core\WAMessage::getMessage('WASHM.varaccess'));
+    }
     $this->detach();
   }
 
   public function lastread($id)
   {
     if (self::$debug || $this->localdebug)
-      $this->doDebug("include/core/WASHM->lastread( $id )", WADebug::SYSTEM);
-
+      $this->doDebug("include/core/WASHM->lastread(%)", WADebug::SYSTEM, $id);
+    if (!$this->mapped)
+      return null;
     $this->attach();
     $link = $this->getlink($id, null);
     $this->detach();
@@ -211,8 +263,9 @@ class WASHM extends WADebug
   public function lastwrite($id)
   {
     if (self::$debug || $this->localdebug)
-      $this->doDebug("include/core/WASHM->lastwrite( $id )", WADebug::SYSTEM);
-
+      $this->doDebug("include/core/WASHM->lastwrite(%)", WADebug::SYSTEM, $id);
+    if (!$this->mapped)
+      return null;
     $this->attach();
     $link = $this->getlink($id, null);
     $this->detach();
@@ -234,7 +287,7 @@ class WASHM extends WADebug
   public function __isset($id)
   {
     if (self::$debug || $this->localdebug)
-      $this->doDebug("include/core/WASHM->__isset( $name )", WADebug::SYSTEM);
+      $this->doDebug("include/core/WASHM->__isset(%)", WADebug::SYSTEM, $name);
 
     $this->attach();
     $link = $this->getlink($id, null);
@@ -255,9 +308,12 @@ class WASHM extends WADebug
 
     $this->attach();
     shm_remove($this->shm);
+    shm_detach($this->shm);
+    $this->shm = shm_attach($this->memid, $this->size);
     $this->detach();
     //restart with same values
-    $this->start();
+    if ($this->mapped)
+      $this->start();
   }
 
   // get all the id of sm objects
@@ -265,7 +321,8 @@ class WASHM extends WADebug
   {
     if (self::$debug || $this->localdebug)
       $this->doDebug('include/core/WASHM->content()', WADebug::SYSTEM);
-
+    if (!$this->mapped)
+      return null;
     $this->attach();
     $links = shm_get_var($this->shm, 0);
     $this->detach();
@@ -277,7 +334,8 @@ class WASHM extends WADebug
   {
     if (self::$debug || $this->localdebug)
       $this->doDebug('include/core/WASHM->size()', WADebug::SYSTEM);
-
+    if (!$this->mapped)
+      return null;
     $this->attach();
     // header size
     $size = (PHP_INT_SIZE * 4) + 8;
@@ -287,7 +345,10 @@ class WASHM extends WADebug
     $size += (((strlen(serialize($pointer))+ (4 * PHP_INT_SIZE)) /4 ) * 4 ) + 4;
     foreach($links as $link)
     {
+      // The autoload is more likely going to send an exception if the shm serialized class cannot be found, warnings are not annoying, @ removed
       $var = shm_get_var($this->shm, $link['p']);
+      if (!$var)
+        throw new \throwables\SHMError(\core\WAMessage::getMessage('WASHM.varaccess'));
       $size += (((strlen(serialize($var))+ (4 * PHP_INT_SIZE)) /4 ) * 4 ) + 4;
     }
     $this->detach();

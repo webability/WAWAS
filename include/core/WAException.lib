@@ -3,7 +3,7 @@
 /*
     WAException.lib, DomCore, the WebAbility(r) Core System
     Contains the basic exception to throw
-    (c) 2008-2010 Philippe Thomassigny
+    (c) 2008-2012 Philippe Thomassigny
 
     This file is part of DomCore
 
@@ -29,7 +29,16 @@
 |------------------------------------------------------------------|
 @End_UML_Box */
 
-class WAException extends WAThrowable
-{}
+namespace core;
+
+class WAException extends \Exception
+{
+  use WAThrowable;
+
+  function __construct($message = null)
+  {
+    parent::__construct($message);
+  }
+}
 
 ?>

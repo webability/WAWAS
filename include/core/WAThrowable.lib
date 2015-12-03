@@ -3,7 +3,7 @@
 /*
     WAThrowable.lib, DomCore, the WebAbility(r) Core System
     Contains the basic class to throw any error or exception
-    (c) 2008-2010 Philippe Thomassigny
+    (c) 2008-2012 Philippe Thomassigny
 
     This file is part of DomCore
 
@@ -33,28 +33,21 @@
 |------------------------------------------------------------------|
 @End_UML_Box */
 
+namespace core;
 
-class WAThrowable extends Exception
+trait WAThrowable
 {
-  private $trace = null;
-  public $message = null;
-
-  function __construct($message = null)
-  {
-    $this->message = $message;
-    $this->trace = debug_backtrace();
-  }
-
   public function __toString()
   {
+    $message = $this->getMessage();
     if (WADebug::getHTMLAPI())
     {
       $error = <<<EOF
-<table border="1"><tr><td bgcolor="#fdd"><b>ERROR: </b></td><td bgcolor="#fdd">$this->message</td></tr>
-<tr><td><b>THROWN: </b></td><td>$this->file (<b>$this->line</b>)</td></tr>
+<table border="1"><tr><td bgcolor="#fdd"><b>ERROR: </b></td><td bgcolor="#fdd">{$message}</td></tr>
+<tr><td><b>THROWN: </b></td><td>{$this->file} (<b>{$this->line}</b>)</td></tr>
 <tr><td valign="top"><b>TRACE: </b></td><td valign="top">
 EOF;
-      foreach($this->trace as $k => $t)
+      foreach($this->getTrace() as $k => $t)
       {
         if ($k) // we dont write 1rst errror since it is where we threw the object
           $error .= (isset($t['file'])?$t['file']:'No file').' (<b>'.(isset($t['line'])?$t['line']:'No line').'</b>) :: calling <font color="blue">'.(isset($t['class'])?$t['class']:'').(isset($t['type'])?$t['type']:'').(isset($t['function'])?$t['function']:'No function').'</font><br />'.PHP_EOL;
@@ -62,8 +55,8 @@ EOF;
       $error .= '</td></tr>'.PHP_EOL.'</table>';
       return $error;
     }
-    $error = "ERROR: $this->message".PHP_EOL."THROWN: $this->file ($this->line)".PHP_EOL."TRACE:".PHP_EOL;
-    foreach($this->trace as $k => $t)
+    $error = "ERROR: {$message}".PHP_EOL."THROWN: {$this->file} ({$this->line})".PHP_EOL."TRACE:".PHP_EOL;
+    foreach($this->getTrace() as $k => $t)
     {
       if ($k) // we dont write 1rst errror since it is where we threw the object
         $error .= (isset($t['file'])?$t['file']:'No file').' ('.(isset($t['line'])?$t['line']:'No line').') :: calling '.(isset($t['class'])?$t['class']:'').(isset($t['type'])?$t['type']:'').(isset($t['function'])?$t['function']:'No function').PHP_EOL;

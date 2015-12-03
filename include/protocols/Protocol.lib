@@ -1,0 +1,39 @@
+<?php
+
+namespace protocols;
+
+// A Protocol is a contextual PIPE, it does NOT stock any data or information locally, but transforms the context
+
+class Protocol extends \Threaded
+{
+  public $hits = 0;
+  public $name;
+
+  public function __construct($config)
+  {
+    if (!$config)
+      throw new \Error('No local config in protocol: ' . $hostname);
+    
+    $this->name = $config->name;
+    // El constructor del protocol configura todos sus datos
+    // Estos datos no pueden ser usados directamente por el objeto ya que será creado de nuevo por cada cliente.
+    // En cambio esta configuración será compartida 
+    
+  }
+
+  // Creates the context needed by our protocol. This context will be transported through the thread.
+  public function createContext()
+  {
+    return null;
+  }
+  
+
+  // Procesar la información: modifica e contexto, y regresa lo que hay que enviar al socket si es el caso  
+  public function process($context, $data)
+  {
+    return '';
+  }
+
+}
+
+?>

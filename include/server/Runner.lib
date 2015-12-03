@@ -1,0 +1,215 @@
+<?php
+
+namespace server;
+
+// ========================================================
+// CLASE APPLICACION PRINCIPAL
+// ========================================================
+final class Runner
+{
+  const VERSION = '1.0.5';
+  
+  // tipo de servidor
+  private $asdaemon = false;
+
+  // Indicadores de apagado
+  private $pleasekill = false;  // true to indicate KILL THE DAEMON from arguments
+  private $shutdown = false;    // true to indicate we already caught a shutdown order (TERM signal or so)
+  
+  // Nuestro servidor principal
+  private $server = null;
+
+  public function __construct() {}
+
+  // ========================================================
+  // FUNCIÓN PRINCIPAL
+  // ========================================================
+  public function run()
+  {
+    // archivo de configuración x defecto
+    $fileconfig = 'conf/server.conf';
+    
+    // ========================================================
+    // Leemos los argumentos
+    // ========================================================
+    if ($_SERVER["argc"] > 1)
+    {
+      for ($item = 1; $item < $_SERVER["argc"]; $item++)
+      {
+        $arg = $_SERVER["argv"][$item];
+
+        switch($arg)
+        {
+          case "--help":
+          case "-h":
+          case "-?":
+            $v = Runner::VERSION;
+            echo <<<EOF
+Servidor de Aplicaciones en PHP v$v
+Use: php runner.php [opciones]
+opciones son:
+-h -? ó --help :                  imprime esta ayuda
+-k ó --kill    :                  mata el demonio
+-v ó --version :                  imprime la versión
+-f [file] ó --fileconfig [file] : usa un archivo de configuración alterno
+--debug [nivel] :                 entra en modo debug, 1 = system, 2 = info, 3 = usuario
+
+
+EOF;
+            die(0);
+            break;
+
+          case "--version":
+          case "-v":
+            echo "Servidor de Aplicaciones en PHP v".Runner::VERSION."\n";
+            die(0);
+            break;
+
+          case "--fileconfig":
+          case "-f":
+            $fileconfig = $_SERVER["argv"][$item+1];
+            $item++;
+            break;
+
+          case "--kill":
+          case "-k":
+            $this->pleasekill = true;
+            break;
+
+          case "--debug": // ignore the debug, already parsed before objects
+            $item++;
+            break;
+
+          default:
+            throw new Error("Argumento desconocido: ".$arg);
+            break;
+        }
+      }
+    }
+    
+    // ========================================================
+    // Leemos nuestra configuración
+    // ========================================================
+    $configbuilder = new ConfigBuilder($fileconfig);
+    $config = $configbuilder->getConfig();
+    $this->asdaemon = $config->getEntry('daemon/status');
+    
+    // ========================================================
+    // Estamos matando al daemon?
+    // ========================================================
+    if ($this->pleasekill)
+    {
+      // debemos de funcionar como un demonio
+      if (!$this->asdaemon)
+        throw new Error('Error, tiene que ser configurado como demonio para poder matarlo.');
+      
+      $pidfile = $configbuilder->data->getEntry('daemon/pidfile');
+      
+      if ($pidfile && file_exists($pidfile))
+      {
+        $fp = fopen($pidfile, 'rb');
+        $pid = fread($fp, filesize($pidfile) );
+        fclose($fp);
+        if (posix_kill($pid, 15))
+        {
+          print 'TERM signal sent to Server with PID: ' . $pid . PHP_EOL;
+          // deberiamos de esperar y dar estatus hasta que se de de baja :D
+          
+// *******
+          
+          
+          exit(0);
+        }
+        throw new Error('There is no WAWAS server with PID: ' . $pid);
+      }
+      throw new Error('There is no WAWAS PID lock file.');
+    }
+
+    // ========================================================
+    // Daemonize
+    // ========================================================
+    if ($this->asdaemon)
+    {
+      // Check if OK
+      $pidfile = $config->getEntry('daemon/pidfile');
+      if (file_exists($pidfile))
+      {
+        $fp = fopen($pidfile, 'rb');
+        $pid = fread($fp, filesize($pidfile) );
+        fclose($fp);
+        if (posix_kill($pid, 0))
+          throw new Error('WAWAS is already running with PID: ' . $pid);
+        if (!unlink($pidfile))
+          throw new Error('WAWAS Cannot unlink PID file '.$pidfile);
+        print 'PID file for defunct WAWAS server process '.$pid.' has been removed'."\n";
+      }
+
+      $pid=pcntl_fork();
+      if ($pid==-1)
+      {
+        throw new Error('Error on FORK. Could not create daemon of WAWAS.');
+      }
+      else if ($pid)
+      {
+        print 'WAWAS Daemon running in background, PID = ' . $pid . PHP_EOL;
+        exit(0);
+      }
+      $this->asdaemon = true;
+      posix_setsid();
+      $pid = posix_getpid();
+
+      $fp = fopen($pidfile, 'wb');
+      fwrite($fp, $pid);
+      fclose($fp);
+    }
+
+    // ========================================================
+    // Lanza el servidor
+    // ========================================================
+    $this->server = new Server($config);
+    $this->server->run();
+    
+    // ========================================================
+    // Limpieza saliendo
+    // ========================================================
+    // Era daemon ? borrar archivo
+    if ($this->asdaemon)
+    {
+      if (!unlink($pidfile))
+        throw new Error('WAWAS Cannot unlink PID file '.$pidfile);
+    }
+  }
+  
+  public function sigTERM()
+  {
+//    if (self::$debug || $this->localdebug)
+//      $this->doDebug("WAWAS->sigTERM() in WAWAS Server", WADebug::SYSTEM);
+    print "SIGTERM.\n";
+
+    if ($this->shutdown)
+    {
+      // SI ya habiamos recibido una señal, entonces formazmos (colgado?)
+      print "Forzamos la parada de la aplicación.\n";
+      exit(0);
+    }
+    $this->shutdown = true;
+    // Decir al servidor que queremos un shutdown limpio (termina de servir los clientes, pero no acepta nuevos)
+    $this->server->shutdown();
+  }
+
+  public function signals_handler($sign)
+  {
+    // Si recibimos una señal de terminación, pues terminamos el servidor.
+    switch($sign)
+    {
+      case SIGTERM:
+      case SIGINT:
+      case SIGHUP:
+        $this->sigTERM();
+        break;
+    }
+  }
+  
+}
+
+?>

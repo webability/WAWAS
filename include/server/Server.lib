@@ -1,450 +1,221 @@
 <?php
 
 // ========================================================
-// MAIN SERVER SINGLETON CLASS
+// CLASE PRINCIPAL DEL SERVIDOR
 // ========================================================
 
-class Server extends WAObject
+namespace server;
+
+class Server
 {
-  public static $instance = null;
+  const VERSION = '1.0.3';
+  
+  // main system configuration
+  private $config;
+  
+  // Indicador de solicitud de parar el servidor
+  private $shutdown = false;
 
-  // max buffer length for incoming read sockets. Defined by config
-  private $bufferlength = 8192;
-
-  // Array of listeners, index by IP:port
+  // All the known modules (system wide)
+  private $modules;
+  private $protocols = array();
   private $listeners = array();
-  // Array of listeners, index by socket ID
-  private $listoflisteners = array();
+  
+  // Dynamic Local clientes on creation
+  private $clients = array();
 
-  // Thread type
-  private $type = "Standalone";
-  // Multithread version
-  // type = Server:
-  private $serverID = null;
-  private $socketmaster = null;
-  // type = Master:
-  private $socketserver = null;
-  private $servers = null;
-
-  // Array of connected clients, index by sockets
-  public $clients = null;
-
-  // Shutdown indicator
-  public $shutdown = false;
-
-  function __construct()
+  public function __construct($config) 
   {
-    if (self::$instance)
-      throw new WAWASError("Error: the Server singleton cannot be declared twice.");
-    self::$instance = $this;
+    $this->config = $config;
+    
+  // Step 3.1, Parse the full config file with protocols and modules already loaded
+    // since every protocol and module may have specific config entries that have to be parsed too
 
-    parent::__construct();
-    if (self::$debug || $this->localdebug)
-      $this->doDebug("Server->__construct()", WADebug::SYSTEM);
+    // 1. We build the modules (system wide)
+    $this->modules = new \Volatile();
+    $modules = $config->getEntry('modules/module');
+    if (!$modules)
+      throw new \Error("Error: there is no modules to run on the server. Please check your config file.");
+    foreach($modules as $module)
+    {
+      $modulename = "\\modules\\".$module['lib'];
+      $this->modules[$module['name']] = new $modulename($module);
+    }
+    
+    // we create protocols
+    $protocols = $config->getEntry('protocols/protocol');
+    if (!$protocols)
+      throw new \Error("Error: there is no protocol to listen to. Please check your config file.");
 
-    $this->bufferlength = $this->base->config->getEntry('server/bufferlength');
+    foreach($protocols as $protocol)
+    {
+      $protoname = "\\protocols\\".$protocol['lib'];
+      $this->protocols[$protocol['name']] = new $protoname($protocol, $config);
+    }
 
     // we parse the default listener
-    $defaultlistener = $this->base->config->getEntry('listeners/default');
-    $listeners = $this->base->config->getEntry('listeners/listener');
-    // maybe there is no listeners, so we use the default one
+    $listeners = $config->getEntry('listeners/listener');
     if (!$listeners)
-      $listeners = array($defaultlistener);
+      throw new \Error("Error: there is no listeners on the server.");
+    
+    $listenerdefault = $config->getEntry('listeners/default');
     foreach($listeners as $listener)
     {
-      $OL = new Listener($this->base->config->applydefault($listener, $defaultlistener));
-      // Register listener into listener list
-      $ip = $OL->getIP();
-      $port = $OL->getPort();
-      if (isset($this->listeners[$ip.":".$port]))
-        throw new WAWASError('Duplicate listener found: ' . $ip . ':' . $port);
-      if (self::$debug || $this->localdebug)
-        $this->doDebug("Listener registered: $ip:$port", WADebug::INFO);
-      $this->listeners[$ip.":".$port] = $OL;
-    }
-
-  }
-
-  public function shutdown()
-  {
-    $this->shutdown = true;
-    if ($this->type == 'Master')
-    {
-      // we send sigterm to every children
-      foreach($this->servers as $pid)
-      {
-        posix_kill($pid, 9);
-      }
-      // wait for the clients to close ?
-    }
-    else
-    {
-      // children: nothing else but wait for clients to close. check clients ?
+      $this->addListener($listener, $listenerdefault);
     }
   }
 
-  public function getType()
+  public function addListener($lconfig, $default)
   {
-    return $this->type;
+    $listener = new Listener($lconfig, $default);
+    $listener->start();
+    $this->listeners[(string)$listener->getSocket()] = $listener;
   }
 
-  private function openListeners()
+  public function stopListeners()
   {
-    if (self::$debug || $this->localdebug)
-      $this->doDebug("Server->openListeners()", WADebug::SYSTEM);
-
-    // For each listener:
-    foreach($this->listeners as $l)
-    {
-      if (!($li = $l->openListener()))
-        return false;
-      $this->listoflisteners[$li] = $l;
-    }
-    return true;
+    foreach($this->listeners as $listener)
+      $listener->stop();
   }
 
-  private function closeListeners()
+  public function addClient($socket, $modules, $protocol, $listenername)
   {
-    if (self::$debug || $this->localdebug)
-      $this->doDebug("Server->closeListeners()", WADebug::SYSTEM);
-
-    // For each listener:
-    if (is_array($this->listoflisteners))
-    {
-      foreach($this->listoflisteners as $l)
-      {
-        $l->closeListener();
-      }
-    }
+    $client = new Client($socket, $modules, $protocol, $listenername);
+    $client->start();
+    // guarda en memoria el cliente (thread)
+    $this->clients[(string)$socket] = $client;
   }
 
-  public function getListeners()
-  {
-    return $this->listeners;
-  }
-
-  public function addClient($l, $socket)
-  {
-    $ip = $port = null;
-    socket_getpeername($socket, $ip, $port);
-    if (isset($this->clients[$socket]))
-    {
-      $this->base->insertError("Client ".$this->type.(isset($this->serverID)?":".$this->serverID:"")." already existed in client list for $ip:$port on ".$l->getIP().":".$l->getPort());
-    }
-    $client = new Client($l, $socket, $ip, $port);
-    $this->clients[$socket] = $client;
-    $l->addClient($client);
-
-    if (self::$debug || $this->localdebug)
-      $this->doDebug("Socket accepted from $ip:$port on ".$l->getIP().":".$l->getPort()." with socket: ".$socket, WADebug::INFO);
-  }
-
-  public function removeClient($socket)
-  {
-    $this->clients[$socket]->getListener()->removeClient($this->clients[$socket]);
-    unset($this->clients[$socket]);
-  }
-
-  // ========================================================
-  // MASTER STUFF
-  // ========================================================
-
-  private function getReaderMaster()
-  {
-    // For each detach process:
-    $reader = array();
-    $item = 0;
-    foreach ($this->socketserver as $s)
-      $reader[$item++] = $s;
-    return $reader;
-  }
-
-  // ========================================================
-  // SERVER STUFF
-  // ========================================================
-
-  private function getReaders()
+  public function getReaders()
   {
     // For each listener:
     $readers = array();
-    foreach($this->listeners as $l)
+    foreach($this->listeners as $listener)
     {
-      $readers[] = $l->getSocket();
-    }
-    if ($this->clients)
-    {
-      foreach ($this->clients as $c)
-      {
-        if (!$c->dataclose)
-          $readers[] = $c->getSocket();
-      }
-    }
-    if ($this->type == "Server")
-    {
-      $readers[] = $this->socketmaster;
+      $readers[] = $listener->getSocket();
     }
     return $readers;
   }
-
+  
   // ========================================================
-  // MAIN RUN FUNCTION
+  // FUNCION PRINCIPAL
   // ========================================================
-
   public function run()
   {
-    if (self::$debug || $this->localdebug)
-      $this->doDebug("Server->run()", WADebug::SYSTEM);
-
-    // we start protocols and modules
-    foreach($this->base->protocols as $protocol)
+    $maincounter = 0;
+    
+    /* init hooks: */
+    
+//*****************************************    
+// BUILD A BETTER HOOK DISPACHER FOR MODULES TO NOT CALL ALL MODULES ALL FUNCTIONS
+//*******************************************    
+//*******************************************    
+//*******************************************    
+    foreach($this->modules as $module) $module->init($this->modules, $this->protocols, $this->listeners);
+    
+    // Variable condicional para el ciclo principal infinito
+    $mainloop = true;
+    // El ciclo es "infinito" hasta recibir una señal para matar el proceso
+    while ($mainloop)
     {
-      $protocol->start();
-    }
+      // Esperamos 1 ms entre cada loop ( o lo que la máquina quiera darnos )
+      // para darle tiempo al OS de hacer lo demás que tiene que hacer y no ser codiciosos en CPU
+      // solo para no tener nuestro programa usando 100% CPU constantemente ;)
+      _sleep(1000);
+      // permitimos a las señales pasar por el sistema e interpretarlas.
+      pcntl_signal_dispatch();
 
-    // We open the needed sockets
-    if (!$this->openListeners())
-    {
-      // Close all opened conections and the master sockets
-      $this->closeListeners();
-      return false;
-    }
-
-    // We create the X servers if needed
-    if ($this->base->config->getEntry('workers/status'))
-    {
-      $this->base->insertMain("Starting forked Workers");
-
-      $this->type = "Master";
-      $this->servers = array();
-
-      if (function_exists('setproctitle'))
-        setproctitle('WAWAS Master'.chr(0).str_repeat(' ', 20));
-
-      for ($i = 1; $i <= $this->base->config->getEntry('workers/maxworkers'); $i++)
+      if (!$this->shutdown)
       {
-        $socket_pair=array();
-        socket_create_pair(AF_UNIX, SOCK_DGRAM, 0, $socket_pair);
-
-        $pid=pcntl_fork();
-        if ($pid==-1)
-        {
-          throw new WAWASError("Error on FORK in Server->run for Workers");
-        }
-        else if ($pid === 0)  // SERVER
-        {
-          if (function_exists('setproctitle'))
-            setproctitle('WAWAS Worker #'.$i.chr(0));
-          $this->socketmaster = $socket_pair[0];
-          $this->type = "Server";
-          $this->serverID = $i;
+        // Si pedimos un shutdown, solamente ignoramos las nuevas entradas mientras terminamos los socekts actuales. Estamos en proceso de desconectar todo.
+        // Vamos a leer todo lo que puede entrar en nuestro servidor en un solo lugar.
+        // Creamos un array de todos los sockets abiertos ( listeners y clientes juntos)
+        $readers = $this->getReaders();
+        $_wr = null;
+        $_ex = null;
+        // Solicitamos el estatus general de todos los sockets
+        $numsockets = socket_select($readers, $_wr, $_ex, 0);
+        if ($numsockets === false)
+        { // es un error grave. Por el momento no captamos este error, solo cerramos todo y notificamos
+          print 'Error grave general de la aplicación'."\n";
+          $err = socket_last_error();
+          print 'Error on socket: '.$err. ' ' . socket_strerror($err) . "\n";
           break;
         }
-        else // MASTER
+
+        if ($numsockets > 0)
         {
-          if (self::$debug || $this->localdebug)
-            $this->doDebug("Server $i, pid = $pid created", WADebug::SYSTEM);
-          $this->servers[$i] = $pid;
-          $this->socketserver[$i] = $socket_pair[1];
-          socket_set_nonblock($socket_pair[1]);
+          foreach ($readers as $reader)
+          {
+            // Maybe a listener have received something
+            if (isset($this->listeners[(string)$reader]))
+            {
+              // We just received some new connection on the listener. Listen for the new sockets
+              while ( ( $socket = @socket_accept($reader) ) !== false)
+              {
+//                print "Client added: $socket\n";
+                // start a thread to listen to this socket
+                $this->addClient($socket, $this->modules, $this->protocols[$this->listeners[(string)$reader]->getProtocol()], $this->listeners[(string)$reader]->getName());
+              }
+              // Reader siguiente
+              continue;
+            }
+          }
         }
       }
-    }
-    else
-    {
-      if (function_exists('setproctitle'))
-        setproctitle('WAWAS Standalone'.chr(0));
-    }
+      else
+      {  // modo shutdown. 
+         // Debemos de cerrar los listeners de una vez para que los que se conectan sepan que ya no los queremos
+        
+      }
 
-    // The master only listen childs, log and masterize
-    // Servers listen to the clients
-
-    if ($this->type == "Master")
-    {
-      // We listen to the servers and other internal processes
-      $mainloop = true;
-
-      while ($mainloop)
+      // limpia los threads del pooler
+      foreach($this->clients as $k => $client)
       {
-        // wait 1 ms between each loop (or at least what the machine lets have)
-        usleep(1000);
-
-        $reader = $this->getReaderMaster();
-
-        // make a "blocking call" with socket_select()
-        $numsockets = socket_select($reader,$_wr = NULL,$_ex = NULL, null);
-        foreach($reader as $r)
+        /*
+        print $k;
+        var_dump($client->isTerminated());
+        var_dump($client->hasRunned());
+        print PHP_EOL;
+        */
+        if ($client->isTerminated())
         {
-          while ($input = socket_read($r , $this->bufferlength))
-          {
-            print "MSG FROM WORKER: ".$input;
-//              $output = "MASTER TO SERVERS MESSAGE:".chr(0);
-//              $ret = socket_write($this->socketserver, $output);
-          }
+          // notificar crashed thread id 
+          $id = $client->getThreadId();
+          
+          print "Client crashed: " . $k . ' - ' . $id . "\n";
+//          var_dump($client->getTerminationInfo());
+          socket_close($client->getSocket());
+          unset($this->clients[$k]);
         }
-
-        if ($this->shutdown)
+        else if ($client->hasRunned())
         {
-          $mainloop = false;
+          socket_close($client->getSocket());
+          unset($this->clients[$k]);
         }
-
-      } // End while
-
-    }
-    elseif ($this->type == "Server" || $this->type == "Standalone")
-    {
-      // We set the end condition variable
-      $mainloop = true;
-
-      // hook init modules
-      foreach($this->base->protocols as $protocol)
-        $protocol->callHooks('init', array($this->type));
-
-      // Main "forever" loop
-      while ($mainloop)
+      }
+      
+      $maincounter++;
+      /* yet another loop: */
+      foreach($this->modules as $module) $module->loop($maincounter);
+      
+      // shutdown limpio, terminamos de servir los clientes
+      if ($this->shutdown && sizeof($this->clients) == 0)
       {
-
-        // wait 1 ms between each loop (or at least what the machine lets have)
-        usleep(1000);
-
-        // hook loop
-        foreach($this->base->protocols as $protocol)
-          $protocol->callHooks('loop', null);
-
-        // create all the readers
-        $readers = $this->getReaders();
-        // make a non-blocking call with socket_select()
-        $numsockets = socket_select($readers, $_wr = NULL, $_ex = NULL, 0);
-        if ($numsockets === false)
-        {
-//          if ( $num_changed_sockets === false && socket_last_error() != 4)
-          $err = socket_last_error();
-          print "Error on socket: ".$err. ' ' . socket_strerror($err) . "\n";
-//        ERROR !!! check it please
-//        We should destroy the listener, client or whatever had the error
-        }
-
-        // nothing new
-        if ($numsockets === 0)
-          continue;
-
-        // something new on sockets
-        foreach($readers  as $r)
-        {
-          // check if we receive something from the master (servers)
-          if ($r == $this->socketmaster)
-          {
-            while ($input = @socket_read($r , $this->bufferlength))
-            {
-              if (self::$debug || $this->localdebug)
-                $this->doDebug("Server ".$this->serverID." has received from master: " . print_r($input, true), WADebug::INFO);
-              // interprete message from master
-
-// *** hook hit master
-
-            }
-            // next reader
-            continue;
-          }
-
-          // Maybe a listener have received something
-          if (isset($this->listoflisteners[$r]))
-          {
-            // We just received a new connection on the listener. Listen for the new sockets
-            $l = $this->listoflisteners[$r];
-            while ( ( $socket = @socket_accept($l->getSocket()) ) )
-            {
-              $this->addClient($l, $socket);
-            }
-            // next reader
-            continue;
-          }
-
-          if (!isset($this->clients[$r]))
-          {
-            // SO WHAT ARE WE LISTENING ?????
-            // ERROR ????
-            continue;
-          }
-
-          // we are in any client, $r is its socket
-          $c = $this->clients[$r];
-          $input = @socket_read($c->getSocket(), $this->bufferlength);
-
-          if (self::$debug || $this->localdebug)
-            $this->doDebug("Socket read entry: ". print_r($input, true), WADebug::INFO);
-
-          if ($input === false && socket_last_error() != 4)
-          {
-            if (self::$debug || $this->localdebug)
-              $this->doDebug("Client closed: ". $this->type.(isset($this->serverID)?":".$this->serverID:"").": Client has disconnected: from ".$c->getClientIP().":".$c->getClientPort().
-              " on ".$c->getListener()->getIP().":".$c->getListener()->getPort() . ", reason: " . socket_last_error() . " " . socket_strerror(socket_last_error()) );
-            // the socket likely had an error and must be closed
-            // we should log this !
-// *****
-
-            $this->removeClient($r);
-
-            // next reader
-            continue;
-          }
-
-          if ($input === '')
-          {
-            // Zero length string means disconnected by client
-            // so we destroy the client listener.
-            if (self::$debug || $this->localdebug)
-              $this->doDebug("Client disconnected: ". $this->type.(isset($this->serverID)?":".$this->serverID:"").": Client has disconnected: from ".$c->getClientIP().":".$c->getClientPort().
-              " on ".$c->getListener()->getIP().":".$c->getListener()->getPort() );
-            $c->closeClient();
-
-            // we should log this !
-
-// ****
-
-            $this->removeClient($r);
-
-            // next reader
-            continue;
-          }
-
-          // input with DATA
-
-          // we notify the master for stats
-          if ($this->type == "Server")
-          {
-            $output = "Hit in child $this->serverID\n";
-            $ret = socket_write($this->socketmaster, $output);
-          }
-
-          // adds the info to the client which will decide the protocol and interpreter
-          $c->process($input);
-
-        } // end scanning all the readers
-
-        // now, we send data and close the clients ended by code
-        if ($this->clients)
-        {
-          foreach($this->clients as $k => $c)
-          {
-            if ($c->write())
-            { // returns true means "close me"
-              $c->closeClient();
-              $this->removeClient($k);
-            }
-          }
-        }
-
-        // gracefull shutdown
-        if ($this->shutdown && sizeof($this->clients) == 0)
-        {
-          $mainloop = false;
-        }
-
-      } // End main while loop
-    }
-
-    $this->closeListeners();
-    return true;
+        $mainloop = false;
+      }
+    } 
+    
+    // Cerramos todo
+    $this->stopListeners();
+    
+    /* shutdown hooks: */
+    foreach($this->modules as $module) $module->shutdown();
+  }
+  
+  public function shutdown()
+  {
+    $this->shutdown = true;
   }
 
 }

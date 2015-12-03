@@ -1,51 +1,73 @@
 <?php
 
 /*
-    __autoload.lib, WAWAS, the WebAbility(r) Web Application Server
+    __autoload.lib, Dominion, the WebAbility(r) Database Abstraction Layer
     Contains the auto class loader for PHP
-    (c) 2011, 2012 Philippe Thomassigny
+    (c) 2008-2010 Philippe Thomassigny
 
-    This file is part of WAWAS
+    This file is part of Dominion
 
-    WAWAS is free software: you can redistribute it and/or modify
+    Dominion is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    WAWAS is distributed in the hope that it will be useful,
+    Dominion is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+    along with Dominion.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-function __autoload($classname)
+function XBautoload($classname)
 {
+  global $BASEDIR;
+
+  if (is_file($BASEDIR . 'include/'.str_replace('\\', '/', $classname).".lib"))
+  {
+    include_once $BASEDIR . 'include/'.str_replace('\\', '/', $classname).".lib";
+    return;
+  }
+  elseif (is_file($BASEDIR . 'application/'.str_replace('\\', '/', $classname).".lib"))
+  {
+    include_once $BASEDIR . 'application/'.str_replace('\\', '/', $classname).".lib";
+    return;
+  }
+
   $dirs = array(
-    './include/core/',
-    './include/datasources/',
-    './include/throwables/',
-    './include/server/',
-    './include/protocols/',
-    './include/modules/',
-    './include/interfaces/'
+    $BASEDIR . 'include.ns/common/',
+    $BASEDIR . 'application.ns/structures/',
+    $BASEDIR . 'application.ns/entities/',
+    $BASEDIR . 'application.ns/graph/',
+    $BASEDIR . 'include.ns/core/',
+    $BASEDIR . 'include.ns/dominion/',
+    $BASEDIR . 'include.ns/xamboo/',
+    $BASEDIR . 'include.ns/patterns/',
+    $BASEDIR . 'include.ns/datasources/',
+    $BASEDIR . 'include.ns/throwables/',
+    $BASEDIR . 'include.ns/wajaf/'
   );
 
   $found = false;
   foreach($dirs as $d)
   {
-    if (is_file($d.$classname.'.lib'))
+    if (is_file($d.$classname.".lib"))
     {
-      include_once $d.$classname.'.lib';
+      include_once $d.$classname.".lib";
       $found = true;
       break;
     }
   }
 
-  if (!$found)
-    throw new WAError("The common library <b>$classname</b> has not been found.");
+  if (!$found) // do not interfere with other autoloads
+  {
+    return;
+  }
+//    throw new Exception("The common library <b>$classname</b> doesn't exist.");
 }
+
+spl_autoload_register('XBautoload');
 
 ?>

@@ -2,11 +2,27 @@
 
 /*
     TemplateSource.lib, DomCore, the WebAbility(r) Core System
-    Contains the Template 4-levels cache access object
-    (c) 2008-2011 Philippe Thomassigny
+    Contains the object to compile and use templates
+    (c) 2008-2012 Philippe Thomassigny
 
-    This file is part of WebAbility
+    This file is part of DomCore
 
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+    
+    Changes:
+      2015-04-21 Phil, fastobjectsource is now optional
+      2015-04-22 Phil, tm1 and tm2 are now protected
 */
 
 /* @UML_Box -- Do not edit
@@ -29,16 +45,18 @@
 |------------------------------------------------------------------|
 @End_UML_Box */
 
+namespace datasources;
+
 class TemplateSource extends DataSource
 {
   protected $originsource = null;
   protected $fastobjectsource = null;
   protected $loaded = false;
 
-  private $tm1;
-  private $tm2;
+  protected $tm1;
+  protected $tm2;
 
-  public function __construct($originsource, $fastobjectsource)
+  public function __construct($originsource, $fastobjectsource = null)
   {
     parent::__construct(null);
 
@@ -54,7 +72,7 @@ class TemplateSource extends DataSource
       $this->doDebug('include/datasources/TemplateSource->isValid()', WADebug::SYSTEM);
 
     $this->tm1 = $this->originsource->getTimeStamp();
-    $this->tm2 = $this->fastobjectsource->getTimeStamp();
+    $this->tm2 = $this->fastobjectsource?$this->fastobjectsource->getTimeStamp():0;
 
     // true if the afo in shared memory is OK
     return ($this->tm1 && $this->tm2 && $this->tm1 <= $this->tm2);
@@ -64,7 +82,7 @@ class TemplateSource extends DataSource
   {
     if (self::$debug || $this->localdebug)
       $this->doDebug("include/datasources/TemplateSource->getTimeStamp()", WADebug::SYSTEM);
-    return $this->fastobjectsource->getTimeStamp();
+    return $this->fastobjectsource?$this->fastobjectsource->getTimeStamp():0;
   }
 
   public function write($data)
@@ -72,9 +90,11 @@ class TemplateSource extends DataSource
     if (self::$debug || $this->localdebug)
       $this->doDebug("include/datasources/TemplateSource->write($data)", WADebug::SYSTEM);
 
-    $this->fastobjectsource->write($data);
     $this->originsource->write($data);
-    parent::write(new WATemplate($data));
+    if ($this->fastobjectsource)
+      $this->fastobjectsource->write($data);
+    parent::write($data);
+
     $this->loaded = true;
   }
 
@@ -83,6 +103,15 @@ class TemplateSource extends DataSource
     if (self::$debug || $this->localdebug)
       $this->doDebug('include/datasources/TemplateSource->read()', WADebug::SYSTEM);
 
+    // datasource exists ?      
+    if (!$this->originsource->isValid())
+    {
+      if ($this->fastobjectsource)
+        $this->fastobjectsource->unlink();
+      parent::unlink();
+      return null;
+    }
+
     if ($this->isValid() && $this->loaded)
       return $this->data;
 
@@ -90,10 +119,11 @@ class TemplateSource extends DataSource
     // origin source is new, we recalculate all the chain
     if ($this->tm1 > $this->tm2)
     {
-      parent::write(new WATemplate($this->originsource->read()));
-      $this->fastobjectsource->write($this->data);
+      parent::write(new \core\WATemplate($this->originsource->read()));
+      if ($this->fastobjectsource)
+        $this->fastobjectsource->write($this->data);
     }
-    elseif ($this->tm2 > $this->timestamp)
+    elseif ($this->fastobjectsource && $this->tm2 > $this->timestamp)
     {
       parent::write($this->fastobjectsource->read());
     }
@@ -107,11 +137,11 @@ class TemplateSource extends DataSource
     if (self::$debug || $this->localdebug)
       $this->doDebug('include/datasource/TemplateSource->unlink()', WADebug::SYSTEM);
     $this->originsource->unlink();
-    $this->fastobjectsource->unlink();
+    if ($this->fastobjectsource)
+      $this->fastobjectsource->unlink();
     parent::unlink();
   }
 
 }
-
 
 ?>

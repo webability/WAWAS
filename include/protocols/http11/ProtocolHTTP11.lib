@@ -1,0 +1,530 @@
+<?php
+
+/*
+It will create HTTPRequest and HTTPResponse if needed on new request
+HTTP11 official RFC #2616
+*/
+
+namespace protocols\http11;
+
+final class ProtocolHTTP11 extends \protocols\Protocol
+{
+  private $maxheadersize;
+  private $maxheaders;
+  private $listenername = '';
+  private $protocolmatch = '/^(GET|POST|PUT|DELETE|HEAD|OPTIONS|TRACE)\s(.*?)\sHTTP\/1\.(0|1)\v/i';
+
+  private $hostnames;
+  
+  public function __construct($localconfig, $config)
+  {
+    parent::__construct($localconfig);
+    
+    $this->maxheadersize = $localconfig->maxheadersize;
+    $this->maxheaders = $localconfig->maxheaders;
+    
+    // Read and create the virtual hosts
+    $vhosts = $config->getEntry('virtualhosts/virtualhost');
+    $defaultvhost = $config->getEntry('virtualhosts/default');
+
+    $this->hostnames = array();
+    if (!$vhosts)
+      $vhosts = array($defaultvhost);
+    foreach($vhosts as $vhost)
+    {
+      // check if the vhost listen on this listener
+      $OV = new VirtualHost($vhost, $defaultvhost);
+      // Register listener into listener list
+      $hostnames = $OV->hostnames;
+      foreach($hostnames as $hostname)
+      {
+        if (isset($this->hostnames[$hostname]))
+          throw new \Error('Duplicate hostname found: ' . $hostname);
+        $this->hostnames[$hostname] = $OV;
+      }
+    }
+  }
+  
+  public function createContext()
+  {
+    $c = new HTTPContext();
+    $c->request = new HTTPRequest();
+    $c->response = new HTTPResponse();
+    return $c;
+  }
+    
+  // PROTOCOL HTTP 1.1 ALGORITHM:
+  // This is a STATE machine:
+  //   - HEADERS: NO => INCOMPLETE => YES
+  //   - BODY: NO => INCOMPLETE => YES with special substate: FILES
+  // There are 3 modules entry points:
+  //   - On data receive no matter what it is
+  //   - On header ready, call with request
+  //   - When the request is fully received, call the process with virtual host
+  // WHEN response has been calculated and sent back, reset request and response for a new turn (protocol 1.1 reuse socket for next request)
+  // If protocol 1.0, just close the socket at the end (the remote client should do it also)
+  public function process($context, $data)
+  {
+    $this->hits++;
+    
+    if (!$context->request->synchro)
+    {
+      $context->request->tempbuffer .= $data;
+      if (!preg_match($this->protocolmatch, $context->request->tempbuffer))
+      {
+        if (strlen($context->request->tempbuffer) > $context->request->maxheadersize)
+        {
+          // log it
+
+          // escribe error 40x headers too large
+          $context->response->setResponse(401, 'Header too large');
+          throw new \Error('The received header is too large too large (Max size: ' . $context->request->maxheadersize . ')');
+          // close thread (had an error, we dont want anymore data from here) ??????
+//********
+        }
+        return;
+      }
+      // Tenemos synchro, es decir reconocimos el protócolo.
+      $context->request->synchro = true;
+      $data = $context->request->tempbuffer;
+      $context->request->tempbuffer = '';
+    }
+
+    try
+    {
+      if (!$context->request->hasheaders)
+      {
+        $context->request->rawheaders .= $data;
+        // CRLF*2 ends the headers
+        if (($pos=strpos($context->request->rawheaders, \server\Constants::CRLF.\server\Constants::CRLF))!==false)
+        {
+          $context->request->hasheaders = true;
+          // cuts the buffer in header + body
+          $context->request->rawbody = substr($context->request->rawheaders, $pos+4);
+          $context->request->rawheaders = substr($context->request->rawheaders, 0, $pos+4);
+
+          if (strlen($context->request->rawheaders) > $this->maxheadersize)
+          {
+            // escribe error 40x headers too large
+            // log it
+            // reinit all
+            // disconnect
+            // close thread (had an error, we dont want anymore data from here)
+
+//            $this->response->setReponse(401, 'Error: the received header is too large.');
+            throw new \Error('received header too large');
+          }
+
+          // parse the headers, get in the package the VHOST
+          $this->parseHeaders($context->request, $context->listenername);
+          // check if the body has length or still wait for info
+
+          // call MODULES with HEADER info
+//*********
+// SHOULD BE filtered by vhost
+//          $this->callHooks('header', array($this->request, $this->response));
+          if (!$context->request->needbody)
+          {
+            $context->request->lengthbody = strlen($context->request->rawbody);
+            $context->request->rawbody = '';
+          }
+        }
+      }
+      else
+      {
+        if ($context->request->needbody)
+          $context->request->rawbody .= $data;
+        else // we just keep the length of what came in body, but we do not want the body
+          $context->request->lengthbody += strlen($data);
+      }
+
+      if ($context->request->hasheaders && !$context->request->hasbody)
+      {
+        if ($context->request->needbody)
+        {
+          // wait for the full body
+          if (isset($context->request->headers["content-length"]) && $context->request->headers["content-length"])
+          {
+            // we ignore oversized body
+            if (strlen($context->request->rawbody) > $context->request->headers["content-length"])
+              $context->request->rawbody = substr($context->request->rawbody, 0, $context->request->headers["content-length"]);
+            elseif (strlen($context->request->rawbody) == $context->request->headers["content-length"])
+            {
+              // nothing to do ?? really ??
+            }
+            else
+            {
+              // check the files, they should be used as temporal files
+
+              $percent = strlen($context->request->rawbody) / $context->request->headers["content-length"];
+//*********
+// SHOULD BE filtered by vhost
+//              $this->callHooks('loading', array($this, $this->request, $percent));
+              return;  // the request is not complete yet, error or connection error, so we cannot parse
+            }
+          }
+          else
+            $context->request->rawbody = null;  // we ignore anything else
+        }
+        else
+        {
+          // wait for the full body
+          if (isset($context->request->headers["content-length"]) && $context->request->headers["content-length"])
+          {
+            // we ignore oversized body
+            if ($context->request->lengthbody < $context->request->headers["content-length"])
+            {
+              return;  // the request is not complete yet, error or connection error, so we cannot parse
+            }
+          }
+        }
+
+        // Getting here means the BODY IS FULLY RECEIVED
+        if ($context->request->rawbody)
+        {
+          $this->parseBody($context->request);
+  //*** FILES SHOULD BE MANAGED BY MODULE ?, ONLY IF MODULE IS INSTERESTED BY FILE (static is NOT interested by POSTs for example)
+  //*** FILES SHOULD NOT BE ADDED DIRECTLY TO BODY BUT ON LOCAL TMP FILE
+  // CHECK IF ANY MODULE IS INTERESTED BY POSTS TO IGNORE THEM OR NOT (MEMORY/DISK SAVING) (WE KNOW THIS ONCE WE HAVE HEADERS)
+        }
+        $context->request->hasbody = true;
+      }
+
+      if ($context->request->hasheaders && $context->request->hasbody)
+      {
+        $r = $this->dorun($context);
+
+        // Could we build a response ? NO => 404 not found !
+        if ($r === false)
+        {
+          // error grave de falta de run
+          // escribe error 404
+          // log it
+          throw new \Error('Error: no se ha interpretado el request');
+//          $this->setResponse(404, 'File not found');
+//          $content = 'Error 404, File not found';
+//          $this->setHeader('Content-Type', 'text/html; charset=utf-8');
+//          $this->setHeader('Content-Length', strlen($content));
+//          $this->setBody($content);
+
+          // reinit the thread for next petition
+        }
+        $data = $this->buildResponseHeader($context->response) . $context->response->body;
+        if (!isset($context->request->headers['connection']) || $context->request->headers['connection'] == 'close')
+        {
+          $context->close = true;
+        }
+        // ready for another loop
+        $context->request->clear();
+        $context->response->clear();
+        return $data;
+
+        // when all has been processed, reinit it for further responses on same socket
+        $version = $context->request->getHTTP('version');
+        if ($version == '1.1')
+        {
+          // HTTP 1.1: we are kept-alive:
+          // clear thread
+//          $this->request->clear();
+//          $this->response->clear();
+        }
+        else
+        {
+          $context->close = true;
+
+          // HTTP 1.0: we just disconnect
+//          $this->request->client->dataclose = true;
+        }
+      }
+    }
+    catch (\Error $E)
+    {
+      $context->close = true;
+      $context->response->body = $E->getMessage();
+      $context->response->setHeader('Date', date ("r", time()));
+      $context->response->setHeader('Content-Length', strlen($context->response->body));
+      $data = $this->buildResponseHeader($context->response) . $context->response->body;
+      // ready for another loop
+      $context->request->clear();
+      $context->response->clear();
+      return $data;
+    }
+
+  }
+
+  private function parseHeaders($request, $listenername)
+  {
+    // Lines separated by CRLF
+    $lineheaders = explode(\server\Constants::CRLF, $request->rawheaders);
+    if (sizeof($lineheaders) > $this->maxheaders)
+    {
+      // envia error al cliente
+//      $this->setReponse(401, 'Error: there are too much header lines.');
+      throw new \Error('Too much header lines');
+    }
+
+    $http = array();
+    $item = 0;
+    $cookies = '';
+
+    foreach ($lineheaders as $line)
+    {
+      if (!$item++)
+      {
+        $line = trim($line);
+        // this is first line
+        $http['method'] = strtok($line, ' /');
+        $http['request'] = strtok(' ');
+        $http['protocol'] = strtoupper(strtok('/'));
+        $http['version'] = strtok('');
+        if ($http['protocol']!='HTTP' || ($http['version']!='1.0' && $http['version']!='1.1'))
+        {
+//          $this->response->setReponse(401, 'Error: unkown or malformed protocol.');
+          throw new \Error('Unknown protocol');
+        }
+        else
+        {
+          $request->http = $http;
+          $this->parseRequest($request, $http['request']);
+        }
+      }
+      else
+      {
+        if (!$line) // is that even possible ??
+          continue;
+          
+        // check folded lines, LWS, RFC 2068 p15
+        $c1 = substr($line, 0, 1);
+        if ($c1 == ' ' || $c1 == "\t") // LWS
+        {
+          if (!$key)
+          {
+//            $this->response->setReponse(401, 'Error: Malformed headers.');
+            throw new \Error('Malformed headers');
+          }
+          // record already exists since key is set
+          if (!is_array($request->headers[$key]))
+            $request->headers[$key] .= trim($line);
+          else
+            $request->headers[$key][] = array_pop($request->headers[$key]) . trim($line);
+        }
+        else
+        {
+          $line = trim($line);
+          if (strpos($line, ":")===false)
+          {
+//            $this->response->setReponse(401, 'Error: Malformed headers.');
+            throw new \Error('Malformed headers');
+          }
+          else
+          {
+            $key = strtolower(strtok($line, ":"));
+            $val = trim(strtok(""));
+            
+            if (!isset($request->headers[$key]))
+            {
+              $request->headers[$key] = $val;
+            }
+            else
+            {
+              if (!is_array($request->headers[$key]))
+                $request->headers[$key] = array($request->headers[$key]);
+              $request->headers[$key][] = $val;
+            }
+            if ($key == 'cookie')
+              $cookies = $val;
+          }
+        }
+      }
+    }
+    
+    // Verify host
+    $host = $request->headers['host'];
+    if (!$host)
+    {
+//      $this->response->setResponse(400, 'Missing HOST in header');
+      throw new \Error('Host missing');
+    }
+
+    if (!isset($this->hostnames[$host]) || !in_array($listenername, (array)$this->hostnames[$host]['listener']) )
+    {
+//      $this->response->setResponse(501, "No host match =$host=");
+      throw new \Error('No host match');
+    }
+    
+    $request->vhost = $host;
+
+    // get the GET variables
+    $this->parseGets($request);
+    $this->parseCookies($request);
+  }
+
+  private function parseRequest($request, $data)
+  {
+    /* REG EXP supposed to parse totally the request
+      ^(?#Protocol)(?:(?:ht|f)tp(?:s?)\:\/\/|~\/|\/)?(?#Username:Password)(?:\w+:\w+@)?(?#Subdomains)(?:(?:[-\w]+\.)+(?#TopLevel Domains)(?:com|org|net|gov|mil|biz|info|mobi|name|aero|jobs|museum|travel|[a-z]{2}))(?#Port)(?::[\d]{1,5})?(?#Directories)(?:(?:(?:\/(?:[-\w~!$+|.,=]|%[a-f\d]{2})+)+|\/)+|\?|#)?(?#Query)(?:(?:\?(?:[-\w~!$+|.,*:]|%[a-f\d{2}])+=?(?:[-\w~!$+|.,*:=]|%[a-f\d]{2})*)(?:&(?:[-\w~!$+|.,*:]|%[a-f\d{2}])+=?(?:[-\w~!$+|.,*:=]|%[a-f\d]{2})*)*)*(?#Anchor)(?:#(?:[-\w~!$+|.,*:=]|%[a-f\d]{2})*)?$
+*/
+
+    $p = strpos($data,'?');
+    $a = strpos($data,'#');
+    $path = $query = $anchor = '';
+    if ($a === false)
+      $path = $data;
+    else
+    {
+      $path = substr($data, 0, $a);
+      $anchor = substr($data, $a+1);
+    }
+    if ($p !== false)
+    {
+      $path = substr($path, 0, $p);
+      $query = substr($path, $p+1);
+    }
+
+    $rp = strrpos($path, '/');
+    if ($rp === false)
+    {
+      $file = $path;
+      $dir = '';
+    }
+    else
+    {
+      $file = substr($path, $rp+1);
+      $dir = substr($path, 0, $rp+1);
+    }
+    $re = strrpos($file, '.');
+    if ($re === false)
+      $ext = '';
+    else
+      $ext = substr($file, $re+1);
+    foreach(array('path' => $path, 'dir' => $dir, 'file' => $file, 'ext' => $ext, 'query' => $query, 'anchor' => $anchor) as $p => $v)
+      $request->http[$p] = $v;
+  }
+
+  private function parseGets($request)
+  {
+    $maxgets = 100; //$vhost->getEntry('maxgets');
+    $q = $request->http['query'];
+    if ($q)
+    {
+      $vars = explode('&', $q);
+      if (sizeof($vars) > $maxgets)
+      {
+//        $this->response->setResponse(401, "Too much GET variables.");
+        throw new \Error('Too much GET variables');
+      }
+      foreach ($vars as $var)
+      {
+        $varpart = explode('=', $var);
+        $request->gets[$varpart[0]] = isset($varpart[1])?$varpart[1]:null;
+      }
+    }
+  }
+
+  private function parseCookies($request)
+  {
+    if (!isset($request->headers['cookies']))
+      return;
+    $maxcookies = 100;//$vhost->getEntry('maxcookies');
+    $xc = explode(';', $request->headers['cookies']);
+    if (sizeof($xc) > $maxcookies)
+    {
+//      $this->response->setResponse(401, "Too much COOKIES in header.");
+      throw new \Error('Too much cookies');
+    }
+    foreach($xc as $c)
+    {
+      $name = strtok($c, '=');
+      $value = strtok('');
+      $request->cookies[$name] = rawurldecode($value);
+    }
+  }
+
+  private function parseBody($request)
+  {
+    // Parse all the POST variables into the body
+    // FILES should be put into the temp directory BEFORE stocking them into memory
+
+    $posts = array();
+    $xp = explode('&', $request->rawbody);
+    foreach($xp as $v)
+    {
+      $xv = explode('=', $v);
+      $request->posts[$xv[0]] = rawurldecode($xv[1]);
+    }
+  }
+
+  public function dorun($context)
+  {
+    $context->host = $this->hostnames[$context->request->vhost];
+
+    // running the protocol modules to build the response
+    $modules = $context->host->modules;
+
+    // usar el error 404 del host si esta definido
+    if (isset($context->request->headers['connection']) && $context->request->headers['connection'] == 'close')
+      $context->response->headers['Connection'] = 'close';
+    
+    foreach($modules as $module)
+    {
+      // 1. process the information into the modules
+      $resp = $context->modules[$module]->process($context);
+      // 2. If the process is true. the module has processed and we stop here (modules are gready)
+      if ($resp)
+        return true;
+    }
+
+    // 3. nothing processed, error 404
+    $context->response->responsecode = 404;
+    $context->response->responsemessage = 'File not found';
+    $context->response->body = 'ERROR 404';
+    $context->response->setHeader('Date', date ("r", time()));
+    $context->response->setHeader('Content-Length', strlen($context->response->body));
+    return true;
+  }
+  
+  private function buildResponseHeader($response)
+  {
+    $data = 'HTTP/1.1 '.$response->responsecode.' '.$response->responsemessage . \server\Constants::CRLF;
+
+    // Be sure there are some headers
+    $response->setHeader('Server', 'Server 1.00.01 PHP7-MT (Unix)');
+
+    // cookies
+/*
+    $cookies = $this->response->getCookie();
+    $ck = '';
+    foreach($cookies as $cookie)
+    {
+      if (!$id)
+        continue;
+      $data .= $id . ': ' . $header . Constants::CRLF;
+    }
+*/
+    foreach($response->headers as $id => $header)
+    {
+      if (!$id)
+        continue;
+      $data .= $id . ': ' . $header . \server\Constants::CRLF;
+    }
+    $data .= \server\Constants::CRLF;
+    return $data;
+  }
+
+  private function buildError($request, $response, $code, $message)
+  {
+    // Gets the message from config if any ?
+    $this->response->setResponse($code, $message);
+    $content = 'Error '.$code.', '.$message;
+
+    // gets a template error ????
+
+    $this->response->setHeader('Content-Type', 'text/html; charset=utf-8');
+    $this->response->setHeader('Content-Length', strlen($content));
+    $this->response->setBody($content);
+    throw new \Error($message);
+  }
+
+}
+
+?>

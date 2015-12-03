@@ -1,141 +1,77 @@
 <?php
 
-final class Listener extends WAObject
+namespace server;
+
+// ========================================================
+// CLASE PRINCIPAL DEL SERVIDOR
+// ========================================================
+
+class Listener
 {
-  private $listener = null;
+  public $name;
+  private $ip;
+  private $port;
+  private $maxconnections;
+  private $bufferlength;
+  private $protocol;
+  
   private $socket = null;
-
-  private $clients = array();
-
-  public $protocols = null;
-
-  function __construct($listener)
+  
+  public function __construct($localconfig, $default)
   {
-    parent::__construct();
-    if (self::$debug || $this->localdebug)
-      $this->doDebug("Listener->__construct($listener)", WADebug::SYSTEM);
-
-    $this->listener = $listener;
-
-    // link the protocols
-    $xprotocol = explode(',', $listener['protocol']);
-    foreach($xprotocol as $p)
-    {
-      if (!isset($this->base->protocols[$p]))
-        throw new WAWASError('Unkown protocol: ' . $p);
-      $this->protocols[$p] = $p;
-    }
+    $this->name = $localconfig->name;
+    $this->ip = $localconfig->ip?:$default->ip;
+    $this->port = $localconfig->port?:$default->port;
+    $this->maxconnections = $localconfig->maxconnections?:$default->maxconnections;
+    $this->bufferlength = $localconfig->bufferlength?:$default->bufferlength;
+    $this->protocol = $localconfig->protocol?:$default->protocol;
   }
-
-  public function __destruct()
+  
+  public function start()
   {
-    if ($this->base->server->getType() == 'Master')
-      $this->closeListener();
-  }
+    // Crear socket TCP
+    if (($this->socket = socket_create(AF_INET, SOCK_STREAM, 0)) < 0)
+      return false; // error
+    
+    // Aseguramos que se pueda reusar el par IP/puerto aún no cerrado por OS
+    socket_set_option($this->socket, SOL_SOCKET, SO_REUSEADDR, 1);
 
-  // ==================================
-  // Socket functions
-  // ==================================
-  public function openListener()
+    // Ligar el socket
+    if (!socket_bind($this->socket, $this->ip, $this->port))
+      return false; // error
+
+    // Escuchamos el socket
+    if (socket_listen($this->socket) < 0)
+      return false; // error
+
+    // Nuestro socket no debe bloquear
+    socket_set_nonblock($this->socket);
+    
+    return true;
+  }
+  
+  public function stop()
   {
-    if (self::$debug || $this->localdebug)
-      $this->doDebug("Listener->openListener()", WADebug::SYSTEM);
-
-    // 1. Create the TCP socket for streams
-    $socket = socket_create(AF_INET, SOCK_STREAM, 0);
-
-    if (!$socket)
-    {
-      $this->base->insertError('Could not create socket in openListener with '.$this->listener["ip"].":".$this->listener["port"]);
-      return false;
-    }
-
-    socket_set_option($socket, SOL_SOCKET, SO_REUSEADDR, 1);
-
-    // 2. Bind the socket
-    if (!socket_bind($socket, $this->listener["ip"], $this->listener["port"]))
-    {
-      $this->base->insertError('Could not bind socket in openListener with '.$this->listener["ip"].":".$this->listener["port"]);
-      socket_close($socket);
-      return false;
-    }
-
-    // 3. Start listening
-    if (!socket_listen($socket))
-    {
-      $this->base->insertError('Could not listen socket in openListener with '.$this->listener["ip"].":".$this->listener["port"]);
-      socket_close($socket);
-      return false;
-    }
-
-    // Save the socket
-    $this->socket = $socket;
-
-    $this->base->insertMain("Socket opened and listening: ".$this->listener["ip"].":".$this->listener["port"]);
-
-    // we finally set socket on non-block, the main manager will work onto times and idles
-    socket_set_nonblock($socket);
-    // remove blocking when forced shutdown
-    $arrOpt = array('l_onoff' => 1, 'l_linger' => 1); // tiny timeout on close
-    socket_set_option($socket, SOL_SOCKET, SO_LINGER, $arrOpt);
-    return $socket;
+    // Cierra el socket principal
+    socket_shutdown($this->socket);
+    socket_close($this->socket);
+    $this->socket = null;
   }
-
-  public function closeListener()
-  {
-    if (self::$debug || $this->localdebug)
-      $this->doDebug("Listener->closeListener()", WADebug::SYSTEM);
-
-    if ($this->socket)
-    {
-      socket_shutdown($this->socket);
-      socket_close($this->socket);
-      $this->socket = null;
-      $this->base->insertMain("Socket closed ".$this->listener["ip"].":".$this->listener["port"]);
-    }
-  }
-
-  // ==================================
-  // Clients
-  // ==================================
-  public function addClient($client)
-  {
-    $this->clients[$client->getSocket()] = $client;
-  }
-
-  public function removeClient($client)
-  {
-    unset($this->clients[$client->getSocket()]);
-  }
-
-  public function getClients()
-  {
-    return $this->clients;
-  }
-
-  // ==================================
-  // Informative funtions
-  // ==================================
-  public function getName()
-  {
-    return $this->listener["name"];
-  }
-
-  public function getIP()
-  {
-    return $this->listener["ip"];
-  }
-
-  public function getPort()
-  {
-    return $this->listener["port"];
-  }
-
+  
   public function getSocket()
   {
     return $this->socket;
   }
+  
+  public function getProtocol()
+  {
+    return $this->protocol;
+  }
 
+  public function getName()
+  {
+    return $this->name;
+  }
 }
 
 ?>

@@ -1,0 +1,279 @@
+<?php
+
+/* @DESCR -- Do not edit
+
+HTTPResponse.lib, Xamboo
+Library to manage the input HTTP request from outside
+(c) 2015 Philippe Thomassigny
+
+This file is part of Xamboo
+
+Xamboo is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Xamboo is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Xamboo.  If not, see <http://www.gnu.org/licenses/>.
+
+Creation: 2010-03-01
+Changes:
+  2014-12-01: Phil, added IP, HOST to track server on load balancer.
+  2015-03-10: Phil, added METHOD to use with the REST API
+  2015-04-21: Phil, documentation, comments
+  2015-06-17: Phil, added PUTDATA to be able to access the data sent by a PUT command into the body, if it not a JSON string
+
+@End_DESCR */
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| HTTPRequest : Contains all HTTP request data                     |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace xamboo;
+
+class HTTPRequest extends \core\WAClass
+{
+  private $_GET = null;
+  private $_POST = null;
+  private $_COOKIE = null;
+  private $_EURL = null;
+  private $headers;
+
+  public $IP = null;
+  public $HOST = null;
+  public $METHOD = null;
+  public $PUTDATA = null;
+
+  public function __construct($context = null)
+  {
+    parent::__construct();
+    
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("xamboo/HTTPRequest->__construct()", WADebug::SYSTEM);
+
+    if ($context)
+    {
+      $this->_GET = $context->request->gets;
+      $this->_POST = $context->request->posts;
+      $this->_COOKIE = $context->request->cookies;
+      
+      $this->headers = $context->request->headers;
+      
+      if (isset($context->request->headers["HTTP_X_FORWARDED_FOR"]))
+      {
+        $this->IP = $context->request->headers["HTTP_X_FORWARDED_FOR"];
+        $this->HOST = null;
+      }
+      else
+      {
+        $this->IP = $context->REMOTE_ADDR;
+        $this->HOST = isset($context->REMOTE_HOST)?$context->REMOTE_HOST:null;
+      }
+      
+      $this->METHOD = strtoupper($context->request->http['method']);
+      if ($this->METHOD == 'PUT')
+      {
+        $this->PUTDATA=$context->request->rawbody;
+        if ($this->PUTDATA)
+          $this->_POST = @json_decode($this->PUTDATA, true);
+      }      
+    }
+    else
+    {
+      $this->_GET = $_GET;
+      $this->_POST = $_POST;
+      $this->_COOKIE = $_COOKIE;
+  //    $this->_EURL = $this->decodeQueryString($this->base->decrypt(rawurldecode(str_replace(" ", "+", $this->getParameter("EURL")))));
+
+      if (extension_loaded('apache'))
+        $this->headers = getallheaders();
+      if (extension_loaded('nsapi'))
+        $this->headers = nsapi_request_headers();
+      if (isset($_SERVER["HTTP_X_FORWARDED_FOR"]))
+      {
+        $this->IP = $_SERVER["HTTP_X_FORWARDED_FOR"];
+        $this->HOST = null;
+      }
+      else
+      {
+        $this->IP = $_SERVER["REMOTE_ADDR"];
+        $this->HOST = isset($_SERVER["REMOTE_HOST"])?$_SERVER["REMOTE_HOST"]:null;
+      }
+      // special case: PUT method with JSON parameters in BODY, because PHP does not supper by default PUT method
+      // se we put the JSON body into _POST if available and correct syntax.
+      $this->METHOD = strtoupper($_SERVER['REQUEST_METHOD']);
+      if ($this->METHOD == 'PUT')
+      {
+        $this->PUTDATA=file_get_contents('php://input');
+        if ($this->PUTDATA)
+          $this->_POST = @json_decode($this->PUTDATA, true);
+      }
+    }
+  }
+
+  public function get_GET()
+  {
+    return $this->_GET;
+  }
+
+  public function get_POST()
+  {
+    return $this->_POST;
+  }
+
+  public function get_COOKIE()
+  {
+    return $this->_COOKIE;
+  }
+
+  public function get_EURL()
+  {
+    return $this->_EURL;
+  }
+
+  // ====================================================================
+  // Parameters link
+  // ====================================================================
+  // the the variable for the user, first check POST (PRIORITY) then GET
+  // if the variable doesnt exists, returns NULL
+  public function getParameter($P, $Type = Validator::ALL, $Query = null, $NotNull = false)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("xamboo/HTTPRequest->getParameter(%, %, %, %)", WADebug::SYSTEM, $P, $Type, $Query, $NotNull);
+
+    if (isset($this->_POST[$P]))
+    {
+      if (Validator::checkVariable($this->_POST[$P], $Type, $Query, $NotNull))
+      {
+        return $this->_POST[$P];
+      }
+    }
+    if ($P!="EURL" && isset($this->_EURL[$P]))
+    {
+      if (Validator::checkVariable($this->_EURL[$P], $Type, $Query, $NotNull))
+      {
+        return $this->_EURL[$P];
+      }
+    }
+    if (isset($this->_GET[$P]))
+    {
+      if (Validator::checkVariable($this->_GET[$P], $Type, $Query, $NotNull))
+      {
+        return $this->_GET[$P];
+      }
+    }
+    if ($NotNull)
+      throw new BadVariableException("$P is null but should not.");
+    return null;
+  }
+
+  public function getParameterGet($P, $Type = Validator::ALL, $Query = null, $NotNull = false)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("xamboo/HTTPRequest->getParameterGet(%, %, %, %)", WADebug::SYSTEM, $P, $Type, $Query, $NotNull);
+
+    // return the value of the GET variable exclusively
+    if (isset($this->_GET[$P]))
+    {
+      if (Validator::checkVariable($this->_GET[$P], $Type, $Query, $NotNull))
+      {
+        return $this->_GET[$P];
+      }
+    }
+    return null;
+  }
+
+  public function setParameterPost($P, $Val)
+  {
+    $this->_POST[$P] = $Val;
+  }
+
+  public function getParameterPost($P, $Type = Validator::ALL, $Query = null, $NotNull = false)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("xamboo/HTTPRequest->getParameterPost(%, %, %, %)", WADebug::SYSTEM, $P, $Type, $Query, $NotNull);
+
+    // return the value of the POST variable exclusively
+    if (isset($this->_POST[$P]))
+    {
+      if (Validator::checkVariable($this->_POST[$P], $Type, $Query, $NotNull))
+      {
+        return $this->_POST[$P];
+      }
+    }
+    return null;
+  }
+
+  public function getParameterEncrypted($P, $Type = Validator::ALL, $Query = null, $NotNull = false)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("xamboo/HTTPRequest->getParameterEncrypted(%, %, %, %)", WADebug::SYSTEM, $P, $Type, $Query, $NotNull);
+
+    // return the value of the Encrypted variable exclusively
+    if (isset($this->_EURL[$P]))
+    {
+      if (Validator::checkVariable($this->_EURL[$P], $Type, $Query, $NotNull))
+      {
+        return $this->_EURL[$P];
+      }
+    }
+    return null;
+  }
+
+  public function getCookie($C)
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("xamboo/HTTPRequest->getCookie(%)", WADebug::SYSTEM, $C);
+
+    // return the value of the cookie
+    if (isset($this->_COOKIE[$C]))
+    {
+      return $this->_COOKIE[$C];
+    }
+    return null;
+  }
+
+
+  public function decodeQueryString($str, $sep1 = "&", $sep2 = "=")
+  {
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("common/HTTPRequest->decodeQueryString(%)", WADebug::SYSTEM, $str);
+
+    $str = trim($str);
+    if (!$str)
+      return null;
+
+    $r = array();
+    $variables=explode($sep1,$str);
+    for ($i=0;$i<count($variables);$i++)
+    {
+     $tab=explode($sep2,$variables[$i]);
+     $r[$tab[0]]=(isset($tab[1])?rawurldecode($tab[1]):null);
+    }
+    return $r;
+  }
+
+  public function getAllHeaders()
+  {
+    return $this->headers;
+  }
+
+  public function getHeader($id)
+  {
+    if (isset($this->headers[$id]))
+      return $this->headers[$id];
+    return null;
+  }
+
+}
+
+?>

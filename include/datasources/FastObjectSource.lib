@@ -3,7 +3,7 @@
 /*
     FastObjectSource.lib, DomCore, the WebAbility(r) Core System
     Contains the Fast Object 2-level access
-    (c) 2008-2011 Philippe Thomassigny
+    (c) 2008-2012 Philippe Thomassigny
 
     This file is part of DomCore
 
@@ -43,6 +43,8 @@
 
 // A Fast Object is ALWAYS serialized into the datasource
 
+namespace datasources;
+
 class FastObjectSource extends DataSource
 {
   protected $datasource = null;
@@ -56,7 +58,7 @@ class FastObjectSource extends DataSource
   {
     parent::__construct(null);
     if (self::$debug || $this->localdebug)
-      $this->doDebug("include/datasources/FastObjectSource->__construct($datasource, $shmsource)", WADebug::SYSTEM);
+      $this->doDebug("include/datasources/FastObjectSource->__construct(%, %)", WADebug::SYSTEM, $datasource, $shmsource);
 
     $this->datasource = $datasource;
     $this->shmsource = $shmsource;
@@ -87,7 +89,7 @@ class FastObjectSource extends DataSource
   public function write($data)
   {
     if (self::$debug || $this->localdebug)
-      $this->doDebug("include/datasources/FastObjectSource->write($data)", WADebug::SYSTEM);
+      $this->doDebug("include/datasources/FastObjectSource->write(%)", WADebug::SYSTEM, $data);
 
     $this->datasource->write(serialize($data));
     if($this->shmsource)
@@ -100,6 +102,15 @@ class FastObjectSource extends DataSource
   {
     if (self::$debug || $this->localdebug)
       $this->doDebug('include/datasources/FastObjectSource->read()', WADebug::SYSTEM);
+
+    // datasource exists ?      
+    if (!$this->datasource->isValid())
+    {
+      if ($this->shmsource)
+        $this->shmsource->unlink();
+      parent::unlink();
+      return null;
+    }
 
     if ($this->isValid() && $this->loaded)
       return $this->data;

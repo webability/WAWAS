@@ -1,0 +1,284 @@
+<?php
+
+namespace server;
+
+class ConfigBuilder
+{
+  private $definitionfile = 'conf/def/main.xml';
+  private $definitiondir = 'conf/def/extra/';
+
+  private $definition = null;
+  private $config = null;
+
+  public function __construct($configfile)
+  {
+    if (!is_file($configfile))
+      throw new \Error("Config file $configfile not found.");
+
+    // 1. load the definitions
+    $this->loadDefinition();
+    $this->loadConfig($configfile);
+  }
+
+  public function loadDefinition()
+  {
+    // Definición principal
+    if (!($data = simplexml_load_file($this->definitionfile)))
+      throw new \Error("Error during parsing definition config file $file.");
+    list($tag, $xdata) = SimpleXML::convert($data);
+    // empezamos con el contenido de <config>
+    $this->definition = $xdata['children'];
+    
+    // Extras
+    $files = scandir($this->definitiondir);
+    foreach($files as $file)
+    {
+      if ($file == '.' || $file == '..')
+        continue;
+      if (!($data = simplexml_load_file($this->definitiondir . $file)))
+        throw new \Error("Error during parsing definition config file $file.");
+      list($tag, $xdata) = SimpleXML::convert($data);
+      // agregamos los varios extra tags
+      foreach($xdata['children'] as $p => $v)
+      {
+        if ($p != 'addendum')
+          $this->definition[$p] = $v;
+      }
+      if (isset($xdata['children']['addendum']))
+      {
+        foreach($xdata['children']['addendum']['children'] as $p => $v)
+        {
+          $this->definition[$p] = array_merge_recursive($this->definition[$p], $v);
+        }
+      }
+    }
+  }
+
+  public function loadConfig($file)
+  {
+    // first step: load the whole config
+    if (!($data = simplexml_load_file($file)))
+      throw new \Error("Error during parsing config file $file.");
+    $this->checklevel($data);
+
+    // second step: build the config based on definition
+    $this->config = new Config();
+    // step 1: build data based on configxml
+    $configdata = $this->parse($this->definition, $data);
+    foreach($configdata as $p => $v)
+      $this->config->$p = $v;
+  }
+
+  public function checklevel($data)
+  {
+    // scan for <files> tags
+    foreach($data as $e => $r)
+    {
+      if ($e == 'include')
+      {
+        if (!($redata = simplexml_load_file((string)$r)))
+          throw new \Error("Error during parsing config file $file.");
+        $this->checklevel($redata);
+        foreach($redata as $children)
+          $this->xmlappend($data, $children);
+      }
+      else
+      {
+        $this->checklevel($r);
+      }
+    }
+    unset($data->include);
+  }
+  
+  function xmlappend($father, $children)
+  {
+    // check class
+    if ((get_class($father) == 'SimpleXMLElement') && (get_class($children) == 'SimpleXMLElement'))
+    {
+      // check if the value is string value / data
+      if (trim((string) $children) == '')
+      {
+        // add element and attributes
+        $element = $father->addChild($children->getName());
+        foreach ($children->attributes() as $attKey => $attValue)
+        {
+          $element->addAttribute($attKey, $attValue);
+        }
+        // add children
+        foreach ($children->children() as $child)
+        {
+          $this->xmlappend($element, $child);
+        }
+      }
+      else
+      {
+        // set the value of this item
+        $element = $father->addChild($children->getName(), trim((string) $children));
+      }
+    }
+    else
+    {
+      // throw an error
+      throw new \Error('Error, the expected parameters were not SimpleXMLElement');
+    }
+  }
+
+  // =====================================================
+  // MAIN PARSER
+  // =====================================================
+  private function parse($def, $config)
+  {
+    $result = array();
+    foreach($def as $p => $v)
+    {
+      if (sizeof($config->$p) == 0)
+        $result[$p] = null;
+      elseif (sizeof($config->$p) > 1 && (!isset($v['attributes']['loop']) || $v['attributes']['loop'] != 'yes'))
+      {
+        // A tag can be fragmented between various files
+        // we have to merge every fragment
+        $data = array();
+        foreach($config->$p as $block)
+        {
+          $data = array_merge_recursive($data, $this->parseLevel($p, $v, $block));
+        }
+        $result[$p] = $data;
+      }
+      else  // == 1 or is a loop
+      {
+        $val = $this->parseLevel($p, $v, $config->$p);
+        $result[$p] = $val;    
+      }
+    }
+    return $result;
+  }
+
+  private function parseLevel($p, $v, $config)
+  {
+    if (!isset($v['attributes']) || !isset($v['attributes']['type']))
+      throw new \Error('Error: Type for ['.$p.'] is mandatory'."\n");
+    if ($v['attributes']['type'] == 'container')
+    {
+      // contains things
+      $val = null;
+      if (isset($config) && isset($v['children']))
+      {
+        $val = $this->parse($v['children'], $config);
+      }
+    }
+     else
+    {
+      // it's a value
+      $val = sprintf($config);
+      if (!$val && $v['attributes']['mandatory'] && isset($v['data']))
+        $val = $v['data'];
+      if (!$val && isset($v['attributes']['mandatory']) && $v['attributes']['mandatory'] == 'yes')
+      {
+        throw new \Error('Error: ['.$p.'] is mandatory. Context: '.var_export($v, true)."\n".var_export($config, true)."\n");
+      }
+      switch($v['attributes']['type'])
+      {
+        case 'directory':
+          if (!is_dir($val))
+            throw new \Error('Error: ['.$p.'] is not a valid directory: '.$val);
+          if (isset($v['attributes']['condition']) && !is_file($val.'/'.$v['attributes']['condition']))
+            throw new \Error('Error: ['.$p.'] must contain '.$v['attributes']['condition']);
+          break;
+        case 'file':
+//            if (!is_file($val))
+//              throw new \Error('Error: ['.$p.'] is not a valid file: '.$val);
+          break;
+        case 'string':
+          break;
+        case 'boolean':
+          $val = trim(strtolower($val));
+          if ($val == 'on' || $val == '1' || $val == 'yes' || $val == 'true')
+            $val = true;
+          else
+            $val = false;
+          break;
+        case 'integer':
+//    if (!$tmp || !is_numeric($tmp) || !ctype_digit($tmp))
+//      throw new \Error('Error, maxconnections '.$tmp.' is not an integer.');
+//    $this->server['maxconnections'] = $tmp;
+//    if (ctype_digit($I) && $I >= $min && $I <= $max)
+//      return true;
+          break;
+        case 'mail':
+          break;
+        case 'ip':
+//    if (preg_match('/^[0-2]{0,1}[0-9]{1,2}.[0-2]{0,1}[0-9]{1,2}.[0-2]{0,1}[0-9]{1,2}.[0-2]{0,1}[0-9]{1,2}$/', $IP))
+//      return true;
+          break;
+        case 'port':
+//    if (ctype_digit($Port) && $Port >= 10 && $Port <= 65534)
+//      return true;
+          break;
+        default:
+          throw new \Error('Error: ['.$p.'] has not a valid type: '.$v['attributes']['type']);
+      }
+    }
+    
+    if (isset($v['attributes']['loop']) && $v['attributes']['loop'] == 'yes')
+    {
+      if (isset($config))
+      {
+        $val = array();
+        foreach($config as $cv)
+        {
+          if (isset($v['children']) && is_array($v['children']))
+            $val[] = $this->parse($v['children'], $cv);
+          else
+            $val[] = sprintf($cv);
+        }
+      }
+    }
+    
+        
+    return $val;
+  }
+  
+  public function applydefault($cfg, $default)
+  {
+    foreach($default as $k => $v)
+    {
+      if (!isset($cfg[$k]))
+      {
+        $cfg[$k] = $v;
+      }
+      else
+      {
+        if (is_array($v))
+        {
+          if (!isset($v[0])) // is numeric array: it's a list of same values
+            $cfg[$k] = $this->applydefault($cfg[$k], $v);
+        }
+      }
+    }
+    return $cfg;
+  }
+  
+  public function getConfig()
+  {
+    return $this->config;
+  }
+
+  // =====================================================
+  // GETs
+  // =====================================================
+  public function getEntry($entry)
+  {
+    $xentry = explode('/', $entry);
+    $local = $this->data;
+    foreach($xentry as $anentry)
+    {
+      if (!isset($local[$anentry]))
+        throw new \Error('Error, entry '.$anentry.' does not exists into the config parameters.');
+      $local = $local[$anentry];
+    }
+    return $local;
+  }
+
+}
+
+?>

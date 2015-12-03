@@ -1,0 +1,129 @@
+<?php
+
+/*
+    WASimpleXML.lib, DomCore, the WebAbility(r) Core System
+    Contains the basic class to compile any XML to a readable PHP array
+    (c) 2008-2012 Philippe Thomassigny
+
+    This file is part of DomCore
+
+    DomCore is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    DomCore is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with DomCore.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* @UML_Box
+|------------------------------------------------------------------|
+| WASimpleXML: XML reader                                          |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+| + ::compile($buffer: string): Array                              |
+| - ::convert($xml: XMLNode): Array                                |
+| + ::tags($buffer: string): Array                                 |
+| - ::converttags($xml: XMLNode): Array                            |
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace core;
+
+// Static class to compile any XML file
+class WASimpleXML
+{
+  public static function compile($buffer)
+  {
+    $tree = array();
+    if (strpos($buffer, '<?xml') !== false)
+    {
+      $xml = simplexml_load_string($buffer);
+      $tree = self::convert($xml);
+    }
+    return $tree;
+  }
+
+  private static function convert($xml)
+  {
+    if (!($xml instanceof \SimpleXMLElement))
+      return $xml;
+
+    $nodename = $xml->getName();
+    $node = array('tag' => $nodename);
+
+    // 1. the attributes
+    foreach ($xml->attributes() as $name => $value)
+    {
+      $node['attributes'][$name] = (string)$value;
+    }
+
+    // 2. the children
+    foreach ($xml->children() as $name => $value)
+    {
+      $node[] = self::convert($value);
+    }
+
+    // 3. the content data
+    $data = trim((string)$xml);
+    if ($data)
+      $node['data'] = $data;
+
+    return $node;
+  }
+
+  public static function tags($buffer)
+  {
+    $tree = array();
+    if (strpos($buffer, '<?xml') !== false)
+    {
+      $xml = simplexml_load_string($buffer);
+      $tree = self::converttags($xml);
+    }
+    return $tree;
+  }
+
+  private static function converttags($xml)
+  {
+    if (!($xml instanceof \SimpleXMLElement))
+      return $xml;
+
+    $node = array();
+    // the children
+    $item = 0;
+    $names = array();
+    foreach ($xml->children() as $name => $value)
+    {
+      if (isset($node[$name]))
+      {
+        if (isset($names[$name]))
+          $node[$name][] = self::converttags($value);
+        else
+        {
+          $node[$name] = array($node[$name], self::converttags($value));
+          $names[$name] = true;
+        }
+      }
+      else
+        $node[$name] = self::converttags($value);
+      $item ++;
+    }
+    if ($item)
+      return $node;
+
+    // the content data
+    $data = trim((string)$xml);
+    if ($data)
+      return $data;
+
+    return null;
+  }
+
+}
+
+?>

@@ -1,0 +1,234 @@
+<?php
+
+/* @DESCR -- Do not edit
+
+HTTPResponse.lib, Xamboo
+Library to manage the output HTTP response to the client
+(c) 2015 Philippe Thomassigny
+
+This file is part of Xamboo
+
+Xamboo is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Xamboo is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Xamboo.  If not, see <http://www.gnu.org/licenses/>.
+
+Creation: 2010-03-01
+Changes:
+  2015-04-21: Phil, documentation, comments
+
+@End_DESCR */
+
+/* @UML_Box -- Do not edit
+|------------------------------------------------------------------|
+| HTTPResponse : Contains all HTTP response data                   |
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+|------------------------------------------------------------------|
+@End_UML_Box */
+
+namespace xamboo;
+
+class HTTPResponse extends \core\WAClass
+{
+  private $header = array();
+  private $cookies = array();
+  private $js = array();
+  private $jsr = array();
+  private $css = array();
+  private $variables = array();
+  private $extra = "";
+  private $buffer = "";
+  private $responsecode = 200;
+
+  public $statuscodes = array(100 => "Continue", 101 => "Switching Protocols", 102 => "Processing", 200 => "OK", 201 => "Created", 202 => "Accepted", 203 => "Non-Authoritative Information", 204 => "No Content", 205 => "Reset Content", 206 => "Partial Content", 207 => "Multi-Status", 300 => "Multiple Choices", 301 => "Moved Permanently", 302 => "Found", 303 => "See Other", 304 => "Not Modified", 305 => "Use Proxy", 306 => "(Unused)", 307 => "Temporary Redirect", 308 => "Permanent Redirect", 400 => "Bad Request", 401 => "Unauthorized", 402 => "Payment Required", 403 => "Forbidden", 404 => "Not Found", 405 => "Method Not Allowed", 406 => "Not Acceptable", 407 => "Proxy Authentication Required", 408 => "Request Timeout", 409 => "Conflict", 410 => "Gone", 411 => "Length Required", 412 => "Precondition Failed", 413 => "Request Entity Too Large", 414 => "Request-URI Too Long", 415 => "Unsupported Media Type", 416 => "Requested Range Not Satisfiable", 417 => "Expectation Failed", 418 => "I'm a teapot", 419 => "Authentication Timeout", 420 => "Enhance Your Calm", 422 => "Unprocessable Entity", 423 => "Locked", 424 => "Failed Dependency", 424 => "Method Failure", 425 => "Unordered Collection", 426 => "Upgrade Required", 428 => "Precondition Required", 429 => "Too Many Requests", 431 => "Request Header Fields Too Large", 444 => "No Response", 449 => "Retry With", 450 => "Blocked by Windows Parental Controls", 451 => "Unavailable For Legal Reasons", 494 => "Request Header Too Large", 495 => "Cert Error", 496 => "No Cert", 497 => "HTTP to HTTPS", 499 => "Client Closed Request", 500 => "Internal Server Error", 501 => "Not Implemented", 502 => "Bad Gateway", 503 => "Service Unavailable", 504 => "Gateway Timeout", 505 => "HTTP Version Not Supported", 506 => "Variant Also Negotiates", 507 => "Insufficient Storage", 508 => "Loop Detected", 509 => "Bandwidth Limit Exceeded", 510 => "Not Extended", 511 => "Network Authentication Required", 598 => "Network read timeout error", 599 => "Network connect timeout error");
+  
+  public function __construct()
+  {
+    parent::__construct();
+
+    if (self::$debug || $this->localdebug)
+      $this->doDebug("xamboo/HTTPResponse->__construct()", WADebug::SYSTEM);
+  }
+
+  public function setResponseCode($code)
+  {
+    $this->responsecode = $code;
+  }
+  
+  public function getResponseCode()
+  {
+    return $this->responsecode;
+  }
+  
+  public function setHeader($id, $str)
+  {
+    $this->header[$id] = $str;
+  }
+
+  public function setCookie($id, $str)
+  {
+    $this->cookies[$id] = $str;
+  }
+
+  public function setJS($id)
+  {
+    $this->js[$id] = $id;
+  }
+
+  public function setJSFromRepository($id)
+  {
+    $this->jsr[$id] = $id;
+  }
+
+  public function setCSS($id)
+  {
+    $this->css[$id] = $id;
+  }
+
+  public function buildHeaders()
+  {
+    // responsecode
+    if ($this->responsecode != 200)
+    {
+      $protocol = (isset($_SERVER['SERVER_PROTOCOL']) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0');
+      header($protocol . ' ' . $this->responsecode . ' ' . $this->statuscodes[$this->responsecode]);
+    }
+    
+    // other headers
+    foreach($this->header as $k => $h)
+    {
+      header("$k: $h");
+    }
+  }
+
+  public function buildCookies()
+  {
+    foreach($this->cookies as $k => $c)
+    {
+      setCookie($k, $c);
+    }
+  }
+
+  public function buildJS()
+  {
+    global $JSPHP;
+
+    $js = "";
+    foreach($this->js as $k => $c)
+    {
+      $js .= "<script language=\"javascript\" type=\"text/javascript\" src=\"".$c."\"></script>\n";
+    }
+    $t = "";
+    $item = 0;
+    foreach($this->jsr as $k => $c)
+    {
+      $t .= ($item++?',':'') . $c;
+    }
+    if ($item)
+      $js .= "<script language=\"javascript\" type=\"text/javascript\" src=\"/$JSPHP?JS={$t}&amp;".time()."\"></script>\n";
+    return $js;
+  }
+
+  public function buildCSS()
+  {
+    $css = "";
+    foreach($this->css as $k => $c)
+    {
+      $css .= "<link rel=\"stylesheet\" href=\"".$c."\" type=\"text/css\" />\n";
+    }
+    return $css;
+  }
+
+  public function addVariable($id, $val, $array = null)
+  {
+    if (isset($this->variables[$id]))
+    {
+      if ($array === true)
+        $this->variables[$id][] = $val;
+      elseif ($array === false)
+        $this->variables[$id] .= $val;
+      else
+        $this->variables[$id] = $val;
+    }
+    else
+    {
+      if ($array === true)
+        $this->variables[$id] = array($val);
+      elseif ($array === false)
+        $this->variables[$id] = $val;
+      else
+        $this->variables[$id] = $val;
+    }
+  }
+
+  public function getVariable($id)
+  {
+    if (isset($this->variables[$id]))
+      return $this->variables[$id];
+    return null;
+  }
+  
+  public function resetBuffer()
+  {
+    $this->buffer = "";
+  }
+
+  public function addString($str)
+  {
+    $this->buffer .= $str;
+  }
+
+  public function getBuffer()
+  {
+    return $this->buffer;
+  }
+
+  public function setExtra($str)
+  {
+    $this->extra .= $str;
+  }
+
+  public function getExtra()
+  {
+    return $this->extra;
+  }
+
+  public function save()
+  {
+    return array(
+      'header' => $this->header,
+      'cookies' => $this->cookies,
+      'js' => $this->js,
+      'jsr' => $this->jsr,
+      'css' => $this->css,
+      'variables' => $this->variables,
+      'extra' => $this->extra,
+      'buffer' => $this->buffer,
+      'responsecode' => $this->responsecode
+    );
+  }
+  
+  public function load($data)
+  {
+    $this->header = $data['header'];
+    $this->cookies = $data['cookies'];
+    $this->js = $data['js'];
+    $this->jsr = $data['jsr'];
+    $this->css = $data['css'];
+    $this->variables = $data['variables'];
+    $this->extra = $data['extra'];
+    $this->buffer = $data['buffer'];
+    $this->responsecode = $data['responsecode'];
+  }
+}
+
+?>

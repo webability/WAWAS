@@ -3,7 +3,7 @@
 /*
     FileSource.lib, DomCore, the WebAbility(r) Core System
     Contains the basic file access object
-    (c) 2008-2011 Philippe Thomassigny
+    (c) 2008-2012 Philippe Thomassigny
 
     This file is part of DomCore
 
@@ -25,8 +25,6 @@
 |------------------------------------------------------------------|
 | FileSource : Basic file access                                   |
 |------------------------------------------------------------------|
-| - ::init : boolean                                               |
-| - ::messages : array(string => string)                           |
 | # basepath : string                                              |
 | # path : string                                                  |
 | # filename : string                                              |
@@ -45,13 +43,10 @@
 |------------------------------------------------------------------|
 @End_UML_Box */
 
+namespace datasources;
+
 class FileSource extends DataSource
 {
-  private static $init = false;
-  private static $messages = array(
-    'FileSource.fileerror' => 'The file could not be opened for writing: '
-  );
-
   protected $basepath = '';  // absolute, terminated by /
   protected $path = '';      // terminated by /
   protected $filename = '';
@@ -59,13 +54,6 @@ class FileSource extends DataSource
 
   public function __construct($basepath, $path, $filename, $createdir = false)
   {
-    if (!self::$init)
-    {
-      // send messages to WAMessage
-      WAMessage::addMessages(self::$messages);
-      self::$init = true;
-    }
-
     parent::__construct(null);
 
     if (self::$debug || $this->localdebug)
@@ -140,11 +128,11 @@ class FileSource extends DataSource
     if (self::$debug || $this->localdebug)
       $this->doDebug("include/datasource/FileSource->write($data)", WADebug::SYSTEM);
     if ($this->createdir)
-      WAFile::createDirectory($this->basepath, $this->path); // throw error if cannot create
+      \core\WAFile::createDirectory($this->basepath, $this->path); // throw error if cannot create
 
     $fp = fopen($this->basepath.$this->path.$this->filename, 'wb');
     if (!$fp)
-      throw new DataSourceError(WAMessage::getMessage('FileSource.fileerror').$this->basepath.$this->path.$this->filename);
+      throw new \throwables\DataSourceError(\core\WAMessage::getMessage('FileSource.fileerror').$this->basepath.$this->path.$this->filename);
     fwrite($fp, $data);
     fclose($fp);
     return true;
@@ -154,7 +142,8 @@ class FileSource extends DataSource
   {
     if (self::$debug || $this->localdebug)
       $this->doDebug('include/datasource/FileSource->unlink()', WADebug::SYSTEM);
-    unlink($this->basepath.$this->path.$this->filename);
+    if (is_file($this->basepath.$this->path.$this->filename))
+      unlink($this->basepath.$this->path.$this->filename);
   }
 
 }
