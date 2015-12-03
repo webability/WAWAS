@@ -5,6 +5,41 @@ It uses the pthreads PECL extension, in CLI mode.
 
 ---
 
+Installation:
+
+1. Download and compile PHP7 in CLI mode:
+In this example it is compiled and installed into an alternative directory
+(at the time to redact this document, PHP is still on pre-release candidate)
+
+./configure --prefix=/usr/local/php7 --exec-prefix=/usr/local/php7 \
+   --enable-sockets --enable-pcntl --enable-maintainer-zts \
+   --enable-shmop --enable-sysvsem --enable-sysvshm
+   # you may add anything you need, for example:
+   # --with-pgsql=/usr/pgsql-9.2/ --with-mysqli --with-xmlrpc --with-curl
+
+make
+make install
+ln -s /usr/local/php7/bin/php /usr/local/bin/php7
+
+2. Download wawas and install it into a local directory
+cd /home/sites
+wget http://webability.info/download/wawas/wawas.tar.gz
+tar zxvf wawas.tar.gz
+cd wawas
+
+3. Edit configuration files (IPs to listen to, vhosts, etc)
+vi conf/server.conf
+vi conf/http11/vhosts.conf
+
+4. Go to the main installation directory (where runner.php is placed)
+cd /home/sites/wawas
+
+3. Run the server:
+php7 runner.php
+
+
+---
+
 TO DO at a glance:
 
 Server:
