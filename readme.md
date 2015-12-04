@@ -1,4 +1,4 @@
-WAWAS - The WebAbility(r) PHP Web and Application Server v1
+WAWAS - The WebAbility(r) PHP Web and Application Server v1.0.3
 
 This is a real multithreaded application server 100% coded in PHP 7.
 It uses the pthreads PECL extension, in CLI mode.
