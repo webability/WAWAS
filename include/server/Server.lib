@@ -42,6 +42,18 @@ class Server
       $this->modules[$module['name']] = new $modulename($module);
     }
     
+    // Listeners
+    $listeners = $config->getEntry('listeners/listener');
+    if (!$listeners)
+      throw new \Error("Error: there is no listeners on the server.");
+    // we parse the default listener
+    $listenerdefault = $config->getEntry('listeners/default');
+    // We parse all other listeners
+    foreach($listeners as $listener)
+    {
+      $this->addListener($listener, $listenerdefault);
+    }
+
     // we create protocols
     $protocols = $config->getEntry('protocols/protocol');
     if (!$protocols)
@@ -50,18 +62,7 @@ class Server
     foreach($protocols as $protocol)
     {
       $protoname = "\\protocols\\".$protocol['lib'];
-      $this->protocols[$protocol['name']] = new $protoname($protocol, $config);
-    }
-
-    // we parse the default listener
-    $listeners = $config->getEntry('listeners/listener');
-    if (!$listeners)
-      throw new \Error("Error: there is no listeners on the server.");
-    
-    $listenerdefault = $config->getEntry('listeners/default');
-    foreach($listeners as $listener)
-    {
-      $this->addListener($listener, $listenerdefault);
+      $this->protocols[$protocol['name']] = new $protoname($protocol, $config, $this->listeners);
     }
   }
 
@@ -78,9 +79,9 @@ class Server
       $listener->stop();
   }
 
-  public function addClient($socket, $modules, $protocol, $listenername)
+  public function addClient($socket, $modules, $protocol, $listener)
   {
-    $client = new Client($socket, $modules, $protocol, $listenername);
+    $client = new Client($socket, $modules, $protocol, $listener);
     $client->start();
     // guarda en memoria el cliente (thread)
     $this->clients[(string)$socket] = $client;
@@ -155,7 +156,7 @@ class Server
               {
 //                print "Client added: $socket\n";
                 // start a thread to listen to this socket
-                $this->addClient($socket, $this->modules, $this->protocols[$this->listeners[(string)$reader]->getProtocol()], $this->listeners[(string)$reader]->getName());
+                $this->addClient($socket, $this->modules, $this->protocols[$this->listeners[(string)$reader]->getProtocol()], $this->listeners[(string)$reader]);
               }
               // Reader siguiente
               continue;

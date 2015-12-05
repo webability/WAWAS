@@ -1,18 +1,18 @@
 <?php
 
 /*
-    __autoload.lib, Dominion, the WebAbility(r) Database Abstraction Layer
+    __autoload.lib, WAWAS, the WebAbility(r) Web And Application Server
     Contains the auto class loader for PHP
-    (c) 2008-2010 Philippe Thomassigny
+    (c) 2008-2015 Philippe Thomassigny
 
-    This file is part of Dominion
+    This file is part of WAWAS
 
-    Dominion is free software: you can redistribute it and/or modify
+    WAWAS is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    Dominion is distributed in the hope that it will be useful,
+    WAWAS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -27,45 +27,18 @@ function XBautoload($classname)
 
   if (is_file($BASEDIR . 'include/'.str_replace('\\', '/', $classname).".lib"))
   {
+    // System server and xamboo
     include_once $BASEDIR . 'include/'.str_replace('\\', '/', $classname).".lib";
     return;
   }
   elseif (is_file($BASEDIR . 'application/'.str_replace('\\', '/', $classname).".lib"))
   {
+    // The xamboo application site for example
     include_once $BASEDIR . 'application/'.str_replace('\\', '/', $classname).".lib";
     return;
   }
 
-  $dirs = array(
-    $BASEDIR . 'include.ns/common/',
-    $BASEDIR . 'application.ns/structures/',
-    $BASEDIR . 'application.ns/entities/',
-    $BASEDIR . 'application.ns/graph/',
-    $BASEDIR . 'include.ns/core/',
-    $BASEDIR . 'include.ns/dominion/',
-    $BASEDIR . 'include.ns/xamboo/',
-    $BASEDIR . 'include.ns/patterns/',
-    $BASEDIR . 'include.ns/datasources/',
-    $BASEDIR . 'include.ns/throwables/',
-    $BASEDIR . 'include.ns/wajaf/'
-  );
-
-  $found = false;
-  foreach($dirs as $d)
-  {
-    if (is_file($d.$classname.".lib"))
-    {
-      include_once $d.$classname.".lib";
-      $found = true;
-      break;
-    }
-  }
-
-  if (!$found) // do not interfere with other autoloads
-  {
-    return;
-  }
-//    throw new Exception("The common library <b>$classname</b> doesn't exist.");
+  // We could throw an exception if we want to be greedy, but we should let other autoloads work
 }
 
 spl_autoload_register('XBautoload');

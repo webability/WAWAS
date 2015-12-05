@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<html>
+<body>
+This is the header of the template page called 'template'
+<hr />
+[[CONTENT]]
+<hr />
+This is the footer of the template page called 'template'
+</body>
+</html>

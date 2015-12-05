@@ -72,6 +72,11 @@ class Listener
   {
     return $this->name;
   }
+  
+  public function getPort()
+  {
+    return $this->port;
+  }
 }
 
 ?>

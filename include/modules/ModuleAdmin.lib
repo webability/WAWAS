@@ -133,7 +133,13 @@ Threads: <b>{$threadstext}</b><br />
 </html>    
 EOF;
 
-    $context->response->body = nl2br($data);
+/*
+    ob_start();
+    phpinfo();
+    $data .= ob_get_clean();
+*/
+
+    $context->response->body = $data;
     $context->response->setHeader('Date', date ("r", time()));
     $context->response->setHeader('Content-Length', strlen($context->response->body));
     

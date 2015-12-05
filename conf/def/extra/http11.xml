@@ -15,7 +15,7 @@
   <!-- Protocol specific: HTTP11 & modules -->
   <virtualhosts type="container" mandatory="yes">
     <default type="container">
-      <listener type="string" loop="yes" mandatory="yes"></listener>
+      <listener type="string" mandatory="yes"></listener>
       <documentroot type="string" mandatory="yes"></documentroot>
       <directoryindex type="string" loop="yes" mandatory="yes"></directoryindex>
       <maxheadersize type="integer" mandatory="yes" min="0" max="1000000"></maxheadersize>
@@ -36,7 +36,7 @@
     </default>
     
     <virtualhost type="container" loop="yes">
-      <listener type="string" loop="yes" mandatory="no"></listener>
+      <listener type="string" mandatory="no"></listener>
       <hostname type="string" loop="yes" mandatory="no"></hostname>
       <documentroot type="string" mandatory="no"></documentroot>
       <directoryindex type="string" loop="yes" mandatory="no"></directoryindex>

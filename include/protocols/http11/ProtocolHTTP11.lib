@@ -16,7 +16,7 @@ final class ProtocolHTTP11 extends \protocols\Protocol
 
   private $hostnames;
   
-  public function __construct($localconfig, $config)
+  public function __construct($localconfig, $config, $listeners)
   {
     parent::__construct($localconfig);
     
@@ -32,8 +32,24 @@ final class ProtocolHTTP11 extends \protocols\Protocol
       $vhosts = array($defaultvhost);
     foreach($vhosts as $vhost)
     {
+      $lname = $vhost->listener;
+      // busca el listener que alberga este vhost
+      $port = null;
+      foreach($listeners as $listener)
+      {
+        if ($listener->getName() == $lname)
+        {
+          $port = $listener->getPort();
+          break;
+        }
+      }
+      if (!$port)
+      {
+        throw new \Error('Listener not found on vhost: ' . $hostname . ' - ' . $OV->listener);
+      }
+      
       // check if the vhost listen on this listener
-      $OV = new VirtualHost($vhost, $defaultvhost);
+      $OV = new VirtualHost($vhost, $defaultvhost, $port);
       // Register listener into listener list
       $hostnames = $OV->hostnames;
       foreach($hostnames as $hostname)
@@ -116,7 +132,7 @@ final class ProtocolHTTP11 extends \protocols\Protocol
           }
 
           // parse the headers, get in the package the VHOST
-          $this->parseHeaders($context->request, $context->listenername);
+          $this->parseHeaders($context->request, $context->listenername, $context->response);
           // check if the body has length or still wait for info
 
           // call MODULES with HEADER info
@@ -252,14 +268,14 @@ final class ProtocolHTTP11 extends \protocols\Protocol
 
   }
 
-  private function parseHeaders($request, $listenername)
+  private function parseHeaders($request, $listenername, $response)
   {
     // Lines separated by CRLF
     $lineheaders = explode(\server\Constants::CRLF, $request->rawheaders);
     if (sizeof($lineheaders) > $this->maxheaders)
     {
       // envia error al cliente
-//      $this->setReponse(401, 'Error: there are too much header lines.');
+      $response->setResponse(401, 'Error: there are too much header lines.');
       throw new \Error('Too much header lines');
     }
 
@@ -279,7 +295,7 @@ final class ProtocolHTTP11 extends \protocols\Protocol
         $http['version'] = strtok('');
         if ($http['protocol']!='HTTP' || ($http['version']!='1.0' && $http['version']!='1.1'))
         {
-//          $this->response->setReponse(401, 'Error: unkown or malformed protocol.');
+          $response->setResponse(401, 'Error: unkown or malformed protocol.');
           throw new \Error('Unknown protocol');
         }
         else
@@ -299,7 +315,7 @@ final class ProtocolHTTP11 extends \protocols\Protocol
         {
           if (!$key)
           {
-//            $this->response->setReponse(401, 'Error: Malformed headers.');
+            $response->setResponse(401, 'Error: Malformed headers.');
             throw new \Error('Malformed headers');
           }
           // record already exists since key is set
@@ -313,7 +329,7 @@ final class ProtocolHTTP11 extends \protocols\Protocol
           $line = trim($line);
           if (strpos($line, ":")===false)
           {
-//            $this->response->setReponse(401, 'Error: Malformed headers.');
+            $response->setResponse(401, 'Error: Malformed headers.');
             throw new \Error('Malformed headers');
           }
           else
@@ -340,16 +356,22 @@ final class ProtocolHTTP11 extends \protocols\Protocol
     
     // Verify host
     $host = $request->headers['host'];
+    // separate parts of the host, IP, username etc
     if (!$host)
     {
-//      $this->response->setResponse(400, 'Missing HOST in header');
+      $response->setResponse(400, 'Missing HOST in header');
       throw new \Error('Host missing');
+    }
+
+    if (strpos($host, ':') === false)
+    {
+      $host .= ':80';
     }
 
     if (!isset($this->hostnames[$host]) || !in_array($listenername, (array)$this->hostnames[$host]['listener']) )
     {
-//      $this->response->setResponse(501, "No host match =$host=");
-      throw new \Error('No host match');
+      $response->setResponse(501, "No host match =$host=");
+      throw new \Error('No host match ='.$host.'=');
     }
     
     $request->vhost = $host;

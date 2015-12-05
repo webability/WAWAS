@@ -12,10 +12,9 @@ final class VirtualHost extends \Threaded
   
   private $errors = array();
 
-  function __construct($localconfig, $default)
+  function __construct($localconfig, $default, $onport)
   {
     $this->config = $localconfig;
-    
     $this->listener = $localconfig->listener?:$default->listener;
     $this->documentroot = $localconfig->documentroot?:$default->documentroot;
     $this->directoryindex = $localconfig->directoryindex?:$default->directoryindex;
@@ -26,7 +25,7 @@ final class VirtualHost extends \Threaded
     {
       // port of listener
       if (strpos($hostname, ':') === false)
-        $this->hostnames[$k] = $hostname . ':80';
+        $this->hostnames[$k] = $hostname . ':' . $onport;
     }
     
     $this->modules = $localconfig['module'];

@@ -12,17 +12,17 @@ class Client extends \Thread
 
   private $modules;
   private $protocol;
-  private $listenername;
+  private $listener;
   
   private $hasrunned = false;
 
-  public function __construct($socket, $modules, $protocol, $listenername)
+  public function __construct($socket, $modules, $protocol, $listener)
   {
     $this->socket = $socket;
 
     $this->modules = $modules;
     $this->protocol = $protocol;
-    $this->listenername = $listenername;
+    $this->listener = $listener;
   }
     
   public function getSocket()
@@ -44,7 +44,8 @@ class Client extends \Thread
     $context = $this->protocol->createContext();
     $context->threadid = $this->getThreadId();
     $context->modules = $this->modules;
-    $context->listenername = $this->listenername;
+    $context->listener = $this->listener;
+    $context->listenername = $this->listener->getName();
     $context->start = microtime();
     $context->close = false;
     $ip = $port = null;

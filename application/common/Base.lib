@@ -1,0 +1,18 @@
+<?php
+
+// Main Xamboo site controler and configuration
+
+namespace common;
+
+class Base extends \xamboo\Base_Engine
+{
+  const VERSION = '1.0.0';
+
+  public function __construct($config, $context = null)
+  {
+    parent::__construct($config, $context);
+  }
+
+}
+  
+?>
