@@ -16,19 +16,27 @@ class ModuleLog extends Module
   // The init method called once at the beginning of the server
   public function init($modules, $protocols, $listeners) 
   {
-    $this->doLog('Starting up Server System...');
+    $this->doSysLog('Starting up Server System...');
   }
 
   // The shutdown method called once at the end
   public function shutdown() 
   {
-    $this->doLog('Shuting down up Server System...');
-    
-    print "shutdown de ModuleLog\n";
+    $this->doSysLog('Shuting down Server System...');
   }
   
+  public function start($context) 
+  {
+    $this->doSysLog('Starting up client '.$context->threadid.' for ' . $context->REMOTE_ADDR . ' on ' . $context->listener->getIP() . ':' . $context->listener->getPort());
+  }
+
+  public function stop($context) 
+  {
+    $this->doSysLog('Shuting down client '.$context->threadid.' for ' . $context->REMOTE_ADDR . ' on ' . $context->listener->getIP() . ':' . $context->listener->getPort());
+  }
+
   
-  private function doLog($message)
+  public function doSysLog($message)
   {
     $this->hits++;
     $f = file_put_contents($this->syslog, date('Y-m-d H:i:s') . ': ' . $message . "\n", FILE_APPEND);

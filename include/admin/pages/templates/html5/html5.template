@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    {{TITLE}}
+    <meta charset="{{CHARSET}}">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+
+    <meta name="author" content="Philippe Thomassigny, Copyright © 2010-2015" />
+    <meta name="generator" content="MT PHP APP Server - Xamboo Framework - {{HOSTNAME}}" />
+    <meta name="rating" content="General" />
+    <meta name="designer" content="MT PHP APP Server" />
+
+    <link rel="stylesheet" href="/css/admin.css?v={{VERSION}}">
+    <script src="/js/core.js?v={{VERSION}}"></script>
+    <script src="/js/eventManager.js?v={{VERSION}}"></script>
+    <script src="/js/ajaxManager.js?v={{VERSION}}"></script>
+    <script src="/js/admin.js?v={{VERSION}}"></script>
+  </head>
+  <body onload="onLoad();" class="user-pending" id="body">
+  
+[[CONTENT]]
+
+  </body>
+</html>

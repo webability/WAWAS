@@ -42,6 +42,7 @@ namespace xamboo;
 class Base_Engine extends \core\WABase
 {
   public $config;          // config file
+  public $context;         // context file, is set only in multothreaded app server in Xamboo Module
   
   public $PAGESDIR;        // directory of pages of the instance
   public $PAGESCONTAINER;  // directory of pages of the instance}
@@ -82,6 +83,11 @@ class Base_Engine extends \core\WABase
     // if $config is not an array but a string, we parse it
     if (!is_array($config) && is_string($config))
       $config = XBCompiler::compileLines($config);
+    
+    // The context comes in xamboo module on multithreaded app server.
+    // Most of its content should be copied to HTTPRequest
+    // Only the server intimate configuration stays in it
+    $this->context = $context;
 
     // basic engine config
     // Mandatory parameters: (if this parameter is not set, will search the pages on the local dir, 

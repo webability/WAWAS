@@ -50,7 +50,7 @@ class ModuleXamboo extends Module
       $config = new \xconfig\XConfig(file_get_contents($configfile));
 
       // setup config
-      if (\common\Base::hasInstance())
+      if ($baseobject::hasInstance())
         $base = $baseobject::getInstance();
       else
         $base = new $baseobject($config, $context);

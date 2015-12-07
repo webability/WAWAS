@@ -126,14 +126,7 @@ class Client extends \Thread
         {
           foreach($this->modules as $module) $module->senddata($context, $data);
 
-
           $len = strlen($data);
-          /*
-          print "sending $len" . PHP_EOL;
-          print $data;
-          print PHP_EOL;
-          var_dump($context->close);
-          */
           while ($len > 0)
           {
             $writen = socket_write($this->socket, $data, $len);
@@ -145,7 +138,6 @@ class Client extends \Thread
             $len -= $writen;
             // esperamos 1000 microsegundos. No seamos greedy
             $this->synchronized(function($thread) { $thread->wait(1000); }, $this);
-//            print "resending $len" . PHP_EOL;
           }
         }
         

@@ -1,0 +1,63 @@
+<?php
+
+// Main Xamboo site controler and configuration
+
+namespace admin;
+
+class Base extends \xamboo\Base_Engine
+{
+  const VERSION = '1.0.0';
+
+  private $shmid;
+  private $shmsize;
+  private static $shm;
+  private static $sem;
+
+  public function __construct($config, $context = null)
+  {
+    parent::__construct($config, $context);
+    
+    $this->config = $config;
+    
+    $this->shmid = $this->config->shmid;
+    $this->shmsize = $this->config->shmsize;
+  }
+
+  // =======================================
+  // SHM basic fcts
+  public function attach()
+  {
+    if (!self::$shm)
+      self::$shm = shm_attach($this->shmid, $this->shmsize);    
+    self::$sem = sem_get($this->shmid, 1, 0666, -1); 
+    $res = sem_acquire(self::$sem);
+    if (!$res)
+      throw new \Error('Error: could not acquire Semaphore');
+  }
+
+  public function detach()
+  {
+    sem_release(self::$sem);
+    self::$sem = null;
+  }
+
+  public function write($id, $data)
+  {
+    $this->attach();
+    if (!shm_put_var(self::$shm, $id, $data))
+      throw new \Error('Error: could not write SHM');
+    $this->detach();
+  }
+
+  public function read($id)
+  {
+    $this->attach();
+    $data = @shm_get_var(self::$shm, $id);
+    $this->detach();
+    return $data;
+  }
+  
+  
+}
+  
+?>

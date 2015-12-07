@@ -80,6 +80,74 @@ class ModuleAdmin extends Module
   public function process($context) // $host, $request, $response)
   {
     $this->hits++;
+    try
+    {
+      $BASE_P = null;
+      $URI = strtolower($context->request->http['request']);
+      if ($URI)
+      {
+        // Remove query part (already managed by PHP)
+        if (strpos($URI, '?'))
+        {
+          $URI = substr($URI, 0, strpos($URI, '?'));
+        }
+        if (substr($URI, -1) == '/' && strlen($URI) > 1)
+        {
+          // NO ACEPTAMOS URLS QUE TERMINAN CON /, REDIRECCIONAMOS !!
+          $URI = substr($URI, 0, -1);
+//          header('HTTP/1.1 301 Moved Permanently');
+//          header('Location: ' . $URI . $QUERY);
+//          return;
+        }
+        if (strlen($URI) > 1)
+          $BASE_P = $URI;
+      }
+
+      ob_start();
+      
+      $baseobject = '\\admin\\Base';
+      $configfile = 'include/admin/admin.conf';
+      $config = new \xconfig\XConfig(file_get_contents($configfile));
+
+      // setup config
+      if ($baseobject::hasInstance())
+        $base = $baseobject::getInstance();
+      else
+        $base = new $baseobject($config, $context);
+      
+      // call engine
+      $engine = new \xamboo\engine($URI);
+      // $engine->SKIN = 'myskin';
+      $data = $engine->run($BASE_P);
+      
+      $data = $base->postrun($data);
+      
+      $extras = ob_get_contents();
+      ob_end_clean();
+
+      $context->response->body = $data . $extras;
+      $context->response->setHeader('Date', date ("r", time()));
+      $context->response->setHeader('Content-Length', strlen($context->response->body));
+      
+      $context->response->setHeader('Content-Type', 'text/html');
+    }
+    catch (\Error $t)
+    {
+      $data = 'Error interno: ' . $t;
+      $context->response->body = nl2br($data);
+      $context->response->setHeader('Date', date ("r", time()));
+      $context->response->setHeader('Content-Length', strlen($context->response->body));
+      
+      $context->response->setHeader('Content-Type', 'text/html');
+    }
+    return true;    
+    
+    
+    
+    
+    
+    
+    $this->hits++;
 
     // Cantidad de threads
     // Memoria usada

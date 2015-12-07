@@ -1,0 +1,33 @@
+<?php
+
+/* Template HTML5 for MT PHP APP Server 
+   Autor: Phil, 2015-12-07
+   
+   Changes:
+*/
+
+class html5 extends \xamboo\XBLibrary
+{
+  public function __construct($template, $language)
+  {
+    parent::__construct($template, $language);
+  }
+  
+  public function run($engine, $params)
+  {
+    $title = 'Administration WAWAS - MT PHP APP Server - The WebAbility Network &copy;2015';
+      
+    $data = array(
+      'CHARSET' => 'utf-8',
+      'TITLE' => '<title>'.$title.'</title>',
+      'HOSTNAME' => '__HOSTNAME__',  // host name
+      'VERSION' => $this->base->config->version
+      );
+      
+    $this->template->metaElements($data);
+    return $this->template->resolve();
+  }
+
+}
+
+?>

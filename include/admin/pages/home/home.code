@@ -1,0 +1,43 @@
+[[PHP:
+
+$loaded = $base->read(0);
+$loadedtext = print_r($loaded, true);
+
+$threads = $base->read(1);
+$threadstext = print_r($threads, true);
+
+$txt = '';
+foreach($threads as $id => $th)
+{
+  $thdata = $base->read($id);
+  $txt .= $id . " :: " . print_r($thdata, true);
+}
+
+foreach($base->context->modules as $mod => $mdata)
+{
+  $txt .= $mod . " :: " . $mdata->hits . '<br />';
+}
+
+
+
+$TEXT .= <<<EOF
+  <h1>ADMIN SYSTEM</h1>
+  Counter: {$loaded['counter']}
+  <table border="1"><tr><td style="vertical-align: top;">
+  <pre>
+Loaded: <b>{$loadedtext}</b><br />
+</pre>
+   </td><td style="vertical-align: top;">
+   <pre>
+Threads: <b>{$threadstext}</b><br />
+</pre>
+   </td><td style="vertical-align: top;">
+   <pre>
+   {$txt}
+   </pre>
+   </td></tr>
+   </table>
+<br />
+EOF;
+
+PHP]]
