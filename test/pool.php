@@ -28,7 +28,7 @@ class WebWork extends Worker
 
     for ($a = 1; $a < 5; $a++)
     {
-      $x = file_get_contents('http://10.10.14.21:81');
+      $x = file_get_contents('http://adminwawas.webability.org:81');
       
       print "Load en webwork {$this->num}::{$a} terminado\n";
       $this->wait();

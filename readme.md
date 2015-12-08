@@ -2,6 +2,7 @@
 
 [![Average time to resolve an issue](http://isitmaintained.com/badge/resolution/webability/WAWAS.svg)](http://isitmaintained.com/project/webability/WAWAS "Average time to resolve an issue")
 [![Percentage of issues still open](http://isitmaintained.com/badge/open/webability/WAWAS.svg)](http://isitmaintained.com/project/webability/WAWAS "Percentage of issues still open")
+[![Join the chat at https://gitter.im/webability](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/webability?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 
 This is a real multithreaded application server 100% coded in PHP 7.
