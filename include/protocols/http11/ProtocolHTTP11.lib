@@ -11,6 +11,8 @@ final class ProtocolHTTP11 extends \protocols\Protocol
 {
   private $maxheadersize;
   private $maxheaders;
+  private $maxpetitions;
+  private $timeout;
   private $protocolmatch = '/^(GET|POST|PUT|DELETE|HEAD|OPTIONS|TRACE)\s(.*?)\sHTTP\/1\.(0|1)\v/i';
 
   private $hostnames;
@@ -21,6 +23,8 @@ final class ProtocolHTTP11 extends \protocols\Protocol
     
     $this->maxheadersize = $localconfig->maxheadersize;
     $this->maxheaders = $localconfig->maxheaders;
+    $this->maxpetitions = $localconfig->maxpetitions;
+    $this->timeout = $localconfig->timeout;
     
     // Read and create the virtual hosts
     $vhosts = $config->getEntry('virtualhosts/virtualhost');
@@ -65,6 +69,7 @@ final class ProtocolHTTP11 extends \protocols\Protocol
     $c = new HTTPContext();
     $c->request = new HTTPRequest();
     $c->response = new HTTPResponse();
+    $c->petition = false; // set to true when a petitions is on its way, false, if waiting
     return $c;
   }
     

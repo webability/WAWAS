@@ -52,7 +52,7 @@ class Client extends \Thread
     socket_getpeername($this->socket, $ip, $port);
     $context->REMOTE_ADDR = $ip;
     $context->REMOTE_PORT = $port;
-
+    
     /* start hooks: */
     foreach($this->modules as $module) $module->start($context);
 

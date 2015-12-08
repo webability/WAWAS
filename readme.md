@@ -1,5 +1,9 @@
 # WAWAS - The WebAbility(r) PHP Web and Application Server v1.0.3
 
+[![Average time to resolve an issue](http://isitmaintained.com/badge/resolution/webability/WAWAS.svg)](http://isitmaintained.com/project/webability/WAWAS "Average time to resolve an issue")
+[![Percentage of issues still open](http://isitmaintained.com/badge/open/webability/WAWAS.svg)](http://isitmaintained.com/project/webability/WAWAS "Percentage of issues still open")
+
+
 This is a real multithreaded application server 100% coded in PHP 7.
 It uses the pthreads PECL extension, in CLI mode.
 

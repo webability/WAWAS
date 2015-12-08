@@ -154,7 +154,9 @@ class Server
               // We just received some new connection on the listener. Listen for the new sockets
               while ( ( $socket = @socket_accept($reader) ) !== false)
               {
-//                print "Client added: $socket\n";
+// We are subject to the maxconnections parameter (server/listener). If we pass the quantity of clients, we should "wait" ? "close" ? (we cannot send an error: no protocol recognized)
+                
+                
                 // start a thread to listen to this socket
                 $this->addClient($socket, $this->modules, $this->protocols[$this->listeners[(string)$reader]->getProtocol()], $this->listeners[(string)$reader]);
               }

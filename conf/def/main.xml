@@ -29,6 +29,8 @@
       <lib type="string" mandatory="yes"></lib>
       <maxheadersize type="integer" mandatory="yes"></maxheadersize>
       <maxheaders type="integer" mandatory="yes"></maxheaders>
+      <maxpetitions type="integer" mandatory="yes"></maxpetitions>
+      <timeout type="integer" mandatory="yes"></timeout>
       <module type="string" loop="yes" mandatory="yes"></module>
     </protocol>
   </protocols>
