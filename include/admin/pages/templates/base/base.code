@@ -1,0 +1,14 @@
+<div style="position: fixed; top: 0; left: 0; right: 0; height: 40px; background-color: #00f; color: white; font-size: 2em; text-weight: bold; padding-top: 10px; padding-left: 20px;">
+WAWAS - Administration
+</div>
+
+<div style="position: fixed; top: 50px; left: 0; bottom: 0; width: 200px; background-color: #ccf;">
+Home<br />
+Modules<br />
+Threads<br />
+</div>
+
+<div style="margin-top: 50px; margin-left: 200px; padding: 10px;">
+[[CONTENT]]
+</div>
+

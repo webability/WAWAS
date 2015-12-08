@@ -61,7 +61,7 @@ class ModuleXamboo extends Module
       $data = $engine->run($BASE_P);
       
       $data = $base->postrun($data);
-      
+
       $context->response->body = $data;
       $context->response->setHeader('Date', date ("r", time()));
       $context->response->setHeader('Content-Length', strlen($context->response->body));
@@ -70,6 +70,8 @@ class ModuleXamboo extends Module
     }
     catch (\Error $t)
     {
+      // corrupted thread, we close it (no more executed code in here)
+      $context->close = true;
       $data = 'Error interno: ' . $t;
       $context->response->body = nl2br($data);
       $context->response->setHeader('Date', date ("r", time()));

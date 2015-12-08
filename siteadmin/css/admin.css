@@ -3,3 +3,27 @@
    
    Changes:
 */
+
+
+body
+{
+  background: #f2f2ff;
+  font-family: "Source Sans Pro", "times new roman", "Trebuchet MS", Lucida Grande, "Lucida Sans Unicode", "Lucida Sans", Tahoma, sans-serif;
+  font-size: 12px;
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+}
+
+
+.floatbox
+{
+  float: left; 
+  width: 300px;
+  height: 300px;
+  overflow-y: auto;
+  border: 1px solid grey;
+  border-radius: 5px;
+  padding: 10px;
+  
+}
+

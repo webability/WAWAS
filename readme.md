@@ -25,20 +25,34 @@ ln -s /usr/local/php7/bin/php /usr/local/bin/php7
 ```
 
 ### Download wawas and install it into a local directory
+
+```bash
 cd /home/sites
 wget http://webability.info/download/wawas/wawas.tar.gz
 tar zxvf wawas.tar.gz
 cd wawas
+```
 
 ### Edit configuration files (IPs to listen to, vhosts, etc)
+
+```bash
 vi conf/server.conf
 vi conf/http11/vhosts.conf
+```
 
 ### Go to the main installation directory (where runner.php is placed)
+
+```bash
 cd /home/sites/wawas
+```
 
 ### Run the server:
+
+```bash
 php7 runner.php
+```
+
+I am working on a wawasctl to put in your /etc/init.d or similar.
 
 
 ---
@@ -46,8 +60,8 @@ php7 runner.php
 ## TO DO at a glance:
 
 ### Server:
-- Hools on modules
-- implement maxs on #threads, #clients, #hits, sizes, heades etc
+- Hooks on modules (working on them)
+- implement maxs on #threads, #clients, #hits, sizes, headers etc
 
 ### Protocol HTTP11:
 - Authentication
@@ -58,6 +72,7 @@ php7 runner.php
 - etags
 - portable vhost names (full named host) to detect variants on resolution
 - check anything against RFC to be 100% compliant
+- Support big files for sending and streaming (and not saturate the memory) (see mod_static, eventually mod_streaming ?)
 
 ### Modules:
 - mod_static => check mimes types and errors

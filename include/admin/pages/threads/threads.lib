@@ -1,0 +1,41 @@
+<?php
+
+/* Data listener
+   Autor: Phil, 2015-12-07
+   
+   Changes:
+*/
+
+class getdata extends \xamboo\XBLibrary
+{
+  public function __construct($template, $language)
+  {
+    parent::__construct($template, $language);
+  }
+  
+  public function run($engine, $params)
+  {
+    $loaded = $this->base->read(0);
+    $loadedtext = print_r($loaded, true);
+
+    $threads = $this->base->read(1);
+    $threadstext = print_r($threads, true);
+
+    $txt = '';
+    foreach($threads as $id => $th)
+    {
+      $thdata = $this->base->read($id);
+      $txt .= $id . " :: " . print_r($thdata, true);
+    }
+
+    foreach($this->base->context->modules as $mod => $mdata)
+    {
+      $txt .= $mod . " :: " . $mdata->hits . '<br />';
+    }
+
+    return json_encode(array('status' => 'OK'));
+  }
+
+}
+
+?>

@@ -1,4 +1,4 @@
 # Administration system
 type=simple
 status=published
-template=templates/html5
+template=templates/base

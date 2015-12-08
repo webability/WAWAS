@@ -16,7 +16,7 @@
     <script src="/js/ajaxManager.js?v={{VERSION}}"></script>
     <script src="/js/admin.js?v={{VERSION}}"></script>
   </head>
-  <body onload="onLoad();" class="user-pending" id="body">
+  <body onload="WAWAS.onload();" class="user-pending" id="body">
   
 [[CONTENT]]
 

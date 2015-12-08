@@ -133,6 +133,8 @@ class ModuleAdmin extends Module
     }
     catch (\Error $t)
     {
+      // corrupted thread, we close it (no more executed code in here)
+      $context->close = true;
       $data = 'Error interno: ' . $t;
       $context->response->body = nl2br($data);
       $context->response->setHeader('Date', date ("r", time()));
