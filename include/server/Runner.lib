@@ -7,8 +7,6 @@ namespace server;
 // ========================================================
 final class Runner
 {
-  const VERSION = '1.0.5';
-  
   // tipo de servidor
   private $asdaemon = false;
 
@@ -81,7 +79,7 @@ EOF;
             break;
 
           default:
-            throw new Error("Argumento desconocido: ".$arg);
+            throw new \Error("Argumento desconocido: ".$arg);
             break;
         }
       }
@@ -101,9 +99,9 @@ EOF;
     {
       // debemos de funcionar como un demonio
       if (!$this->asdaemon)
-        throw new Error('Error, tiene que ser configurado como demonio para poder matarlo.');
+        throw new \Error('Error, tiene que ser configurado como demonio para poder matarlo.');
       
-      $pidfile = $configbuilder->data->getEntry('daemon/pidfile');
+      $pidfile = $config->getEntry('daemon/pidfile');
       
       if ($pidfile && file_exists($pidfile))
       {
@@ -120,9 +118,9 @@ EOF;
           
           exit(0);
         }
-        throw new Error('There is no WAWAS server with PID: ' . $pid);
+        throw new \Error('There is no WAWAS server with PID: ' . $pid);
       }
-      throw new Error('There is no WAWAS PID lock file.');
+      throw new \Error('There is no WAWAS PID lock file.');
     }
 
     // ========================================================
@@ -138,16 +136,16 @@ EOF;
         $pid = fread($fp, filesize($pidfile) );
         fclose($fp);
         if (posix_kill($pid, 0))
-          throw new Error('WAWAS is already running with PID: ' . $pid);
+          throw new \Error('WAWAS is already running with PID: ' . $pid);
         if (!unlink($pidfile))
-          throw new Error('WAWAS Cannot unlink PID file '.$pidfile);
+          throw new \Error('WAWAS Cannot unlink PID file '.$pidfile);
         print 'PID file for defunct WAWAS server process '.$pid.' has been removed'."\n";
       }
 
       $pid=pcntl_fork();
       if ($pid==-1)
       {
-        throw new Error('Error on FORK. Could not create daemon of WAWAS.');
+        throw new \Error('Error on FORK. Could not create daemon of WAWAS.');
       }
       else if ($pid)
       {
@@ -176,7 +174,7 @@ EOF;
     if ($this->asdaemon)
     {
       if (!unlink($pidfile))
-        throw new Error('WAWAS Cannot unlink PID file '.$pidfile);
+        throw new \Error('WAWAS Cannot unlink PID file '.$pidfile);
     }
   }
   

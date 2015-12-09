@@ -15,8 +15,12 @@ class getdata extends \xamboo\XBLibrary
   
   public function run($engine, $params)
   {
+    $general = $this->base->read(0);
+
     $data = array(
       'status' => 'OK',
+      'counter' => $general['c'],
+      'time' => microtime(true),
       'threads' => array()
       );
 

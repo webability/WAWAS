@@ -12,7 +12,6 @@ function tick_handler()
 
 register_tick_function('tick_handler');
 
-
 class WebWork extends Worker
 {
   private $num;
@@ -45,7 +44,6 @@ $pool = new Pool(100);
 for ($a = 1; $a < 200000; $a++)
 {
   $pool->submit(new WebWork($a));
-  
 }
 
 

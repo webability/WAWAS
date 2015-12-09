@@ -7,6 +7,7 @@ namespace protocols;
 class Protocol extends \Threaded
 {
   public $hits = 0;
+  public $petitions = 0;
   public $name;
 
   public function __construct($config)

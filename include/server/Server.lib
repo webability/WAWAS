@@ -8,7 +8,7 @@ namespace server;
 
 class Server
 {
-  const VERSION = '1.0.3';
+  const VERSION = '1.0.4';
   
   // main system configuration
   private $config;
@@ -70,7 +70,7 @@ class Server
   {
     $listener = new Listener($lconfig, $default);
     $listener->start();
-    $this->listeners[(string)$listener->getSocket()] = $listener;
+    $this->listeners[(string)$listener->socket] = $listener;
   }
 
   public function stopListeners()
@@ -93,7 +93,7 @@ class Server
     $readers = array();
     foreach($this->listeners as $listener)
     {
-      $readers[] = $listener->getSocket();
+      $readers[] = $listener->socket;
     }
     return $readers;
   }
@@ -158,7 +158,7 @@ class Server
                 
                 
                 // start a thread to listen to this socket
-                $this->addClient($socket, $this->modules, $this->protocols[$this->listeners[(string)$reader]->getProtocol()], $this->listeners[(string)$reader]);
+                $this->addClient($socket, $this->modules, $this->protocols[$this->listeners[(string)$reader]->protocol], $this->listeners[(string)$reader]);
               }
               // Reader siguiente
               continue;

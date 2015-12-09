@@ -1,6 +1,6 @@
 <?php
 
-// Servidor multiprot贸colo
+// Servidor multiprot骳olo
 // (c) 2015 Philippe Thomassigny C.
 // info@webability.info
 // Please read GPL joined licence
@@ -31,7 +31,7 @@ spl_autoload_register('autoload');
 
 function crash()
 {
-  echo 'Crash', PHP_EOL;
+  echo 'Crash ?', PHP_EOL;
 }
 
 register_shutdown_function('crash');
@@ -49,13 +49,13 @@ try
 {
   // Verificamos que tengamos lo que necesitamos para funcionar
   if (!is_callable("posix_kill"))
-    throw new Error('Error: Server necesita la funci贸n posix_kill en le m贸dulo pcntl para funcionar.');
+    throw new Error('Error: Server necesita la funci髇 posix_kill en le m骴ulo pcntl para funcionar.');
   if (!is_callable("pcntl_signal"))
-    throw new Error('Error: Server necesita la funci贸n pcntl_signal en le m贸dulo pcntl para funcionar.');
+    throw new Error('Error: Server necesita la funci髇 pcntl_signal en le m骴ulo pcntl para funcionar.');
   if (!extension_loaded("pthreads"))
-    throw new Error('Error: Server necesita la extensi贸n pthreads para funcionar.');
+    throw new Error('Error: Server necesita la extensi髇 pthreads para funcionar.');
   if (!is_callable("pcntl_fork"))
-    throw new Error('Error: Server necesita la funci贸n pcntl_fork en el m贸dulo pcntl para funcionar.');
+    throw new Error('Error: Server necesita la funci髇 pcntl_fork en el m骴ulo pcntl para funcionar.');
 
   // Verificamos si estamos en modo Debug antes de cualquier cosa
   if ($_SERVER["argc"] > 1)
@@ -87,7 +87,7 @@ try
   $Runner->run();
   exit(0);
 }
-catch (Exception $exception)
+catch (Throwable $exception)
 {
   // Notifica el error
   print "===== ".date("Y-m-d H:i:s", time()).": ".$exception->__toString()."=====\n";

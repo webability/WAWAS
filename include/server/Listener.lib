@@ -9,13 +9,13 @@ namespace server;
 class Listener
 {
   public $name;
-  private $ip;
-  private $port;
-  private $maxconnections;
-  private $bufferlength;
-  private $protocol;
+  public $ip;
+  public $port;
+  public $maxconnections;
+  public $bufferlength;
+  public $protocol;
   
-  private $socket = null;
+  public $socket = null;
   
   public function __construct($localconfig, $default)
   {
@@ -57,31 +57,7 @@ class Listener
     socket_close($this->socket);
     $this->socket = null;
   }
-  
-  public function getSocket()
-  {
-    return $this->socket;
-  }
-  
-  public function getProtocol()
-  {
-    return $this->protocol;
-  }
 
-  public function getName()
-  {
-    return $this->name;
-  }
-
-  public function getIP()
-  {
-    return $this->ip;
-  }
-  
-  public function getPort()
-  {
-    return $this->port;
-  }
 }
 
 ?>

@@ -40,9 +40,9 @@ final class ProtocolHTTP11 extends \protocols\Protocol
       $port = null;
       foreach($listeners as $listener)
       {
-        if ($listener->getName() == $lname)
+        if ($listener->name == $lname)
         {
-          $port = $listener->getPort();
+          $port = $listener->port;
           break;
         }
       }
@@ -69,7 +69,8 @@ final class ProtocolHTTP11 extends \protocols\Protocol
     $c = new HTTPContext();
     $c->request = new HTTPRequest();
     $c->response = new HTTPResponse();
-    $c->petition = false; // set to true when a petitions is on its way, false, if waiting
+    $c->timeout = $this->timeout;
+    $c->petitions = 0;
     return $c;
   }
     
@@ -86,6 +87,7 @@ final class ProtocolHTTP11 extends \protocols\Protocol
   public function process($context, $data)
   {
     $this->hits++;
+    $context->hits ++;
     
     if (!$context->request->synchro)
     {
@@ -136,7 +138,7 @@ final class ProtocolHTTP11 extends \protocols\Protocol
           }
 
           // parse the headers, get in the package the VHOST
-          $this->parseHeaders($context->request, $context->listenername, $context->response);
+          $this->parseHeaders($context->request, $context->listener->name, $context->response);
           // check if the body has length or still wait for info
 
           // call MODULES with HEADER info
@@ -212,7 +214,19 @@ final class ProtocolHTTP11 extends \protocols\Protocol
 
       if ($context->request->hasheaders && $context->request->hasbody)
       {
+        $mb = microtime(true);
+        ob_start();
         $r = $this->dorun($context);
+        $output = ob_get_clean();
+        $me = microtime(true);
+        $context->runtime = $me-$mb;
+        $context->petitions++;
+        // concatenate errors to body 
+        /// **********SHOULD BE A PARAMETER: A LOG, BEFORE, AFTER, SILENT
+        if ($output)
+          $context->response->body = $output . $context->response->body;
+        
+        foreach($context->modules as $module) $module->postprocess($context);
 
         // Could we build a response ? NO => 404 not found !
         if ($r === false)
@@ -220,47 +234,47 @@ final class ProtocolHTTP11 extends \protocols\Protocol
           // error grave de falta de run
           // escribe error 404
           // log it
-          throw new \Error('Error: no se ha interpretado el request');
 //          $this->setResponse(404, 'File not found');
+          throw new \Error('Error: no se ha interpretado el request');
 //          $content = 'Error 404, File not found';
 //          $this->setHeader('Content-Type', 'text/html; charset=utf-8');
 //          $this->setHeader('Content-Length', strlen($content));
 //          $this->setBody($content);
 
-          // reinit the thread for next petition
         }
+        // reinit the thread for next petition
         $data = $this->buildResponseHeader($context->response) . $context->response->body;
+
+        // http 1.0 does not have a connection header
         if (!isset($context->request->headers['connection']) || $context->request->headers['connection'] == 'close')
         {
           $context->close = true;
         }
-        // ready for another loop
-        $context->request->clear();
-        $context->response->clear();
-        return $data;
-
-        // when all has been processed, reinit it for further responses on same socket
-        $version = $context->request->getHTTP('version');
-        if ($version == '1.1')
-        {
-          // HTTP 1.1: we are kept-alive:
-          // clear thread
-//          $this->request->clear();
-//          $this->response->clear();
-        }
         else
         {
-          $context->close = true;
-
-          // HTTP 1.0: we just disconnect
-//          $this->request->client->dataclose = true;
+          // We have passed the max petitions: we close the thread (the client calling us do this)
+          if ($context->petitions > $this->maxpetitions)
+            $context->close = true;
+          else
+          {
+            // ready for another loop
+            $context->request->clear();
+            $context->response->clear();
+          }
         }
+        
+        return $data;
       }
     }
     catch (\Error $E)
     {
+      $output = ob_get_clean();
+      $me = microtime(true);
+      $context->runtime = $me-$mb;
+      $context->petitions++;
+      // We close the thread on error for security (missed class ? syntax error ? PHP problem ?)
       $context->close = true;
-      $context->response->body = $E->getMessage();
+      $context->response->body = $output . $E->getMessage();
       $context->response->setHeader('Date', date ("r", time()));
       $context->response->setHeader('Content-Length', strlen($context->response->body));
       $data = $this->buildResponseHeader($context->response) . $context->response->body;
@@ -269,7 +283,8 @@ final class ProtocolHTTP11 extends \protocols\Protocol
       $context->response->clear();
       return $data;
     }
-
+    
+    // If we arrive here, this is still an incomplete request, we just wait for now and do nothing else
   }
 
   private function parseHeaders($request, $listenername, $response)
@@ -491,6 +506,8 @@ final class ProtocolHTTP11 extends \protocols\Protocol
     if (isset($context->request->headers['connection']) && $context->request->headers['connection'] == 'close')
       $context->response->headers['Connection'] = 'close';
     
+    foreach($context->modules as $module) $module->preprocess($context);
+
     foreach($modules as $module)
     {
       // 1. process the information into the modules

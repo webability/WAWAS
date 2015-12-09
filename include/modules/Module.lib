@@ -21,9 +21,12 @@ namespace modules;
   x header        Happens when the Protocol have found a fully well formed header/request.
   x loading       Happens when we receive a PART of the body/request, but it is not complete yet. 
                   Any protocol should implement this hook to notify a % of loading
+  x preprocess    Happens just before calling process. Informative. Does not modify the context
+  x postprocess    Happens just before calling process. Informative. Does not modify the context
   x process       Happens when the Protocol need the calculation of the response based on the request,
                   once 100% of the request has been received. Any protocol should implement this hook.
                   When a module have calculated a response, other modules *should not* calculate a response.
+  x postprocess   Happens just before calling process. Informative. Does not modify the context
   x stop          Happens when the thread is terminated normally. An abnormal shutdown will not call this.
   
 */
@@ -72,6 +75,8 @@ class Module extends \Threaded
     return false;
   }
 
+  public function preprocess($context) {}
+
   // The process method returns TRUE if modified context, or FALSE if the context is not usefull for our module
   // returning true means "I processed the information, stop here". 
   // Modules are gready and only ONE module can process the information (the first to catch it)
@@ -80,6 +85,8 @@ class Module extends \Threaded
     return false;
   }
   
+  public function postprocess($context) {}
+
   // The stop method is informative only for the module called at the end of the client
   public function stop($context) {}
 

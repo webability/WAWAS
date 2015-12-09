@@ -27,12 +27,12 @@ class ModuleLog extends Module
   
   public function start($context) 
   {
-    $this->doSysLog('Starting up client '.$context->threadid.' for ' . $context->REMOTE_ADDR . ' on ' . $context->listener->getIP() . ':' . $context->listener->getPort());
+    $this->doSysLog('Starting up client '.$context->threadid.' for ' . $context->REMOTE_ADDR . ' on ' . $context->listener->ip . ':' . $context->listener->port);
   }
 
   public function stop($context) 
   {
-    $this->doSysLog('Shuting down client '.$context->threadid.' for ' . $context->REMOTE_ADDR . ' on ' . $context->listener->getIP() . ':' . $context->listener->getPort());
+    $this->doSysLog('Shuting down client '.$context->threadid.' for ' . $context->REMOTE_ADDR . ' on ' . $context->listener->ip . ':' . $context->listener->port);
   }
 
   

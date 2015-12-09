@@ -45,8 +45,9 @@ class Client extends \Thread
     $context->threadid = $this->getThreadId();
     $context->modules = $this->modules;
     $context->listener = $this->listener;
-    $context->listenername = $this->listener->getName();
-    $context->start = microtime();
+    $context->start = microtime(true);
+    $context->lastaccesstime = microtime(true);
+    $context->hits = 0;
     $context->close = false;
     $ip = $port = null;
     socket_getpeername($this->socket, $ip, $port);
@@ -73,6 +74,7 @@ class Client extends \Thread
       $_ex = null;
       // Solicitamos el estatus general de todos los sockets
       $numsockets = socket_select($readers, $_wr, $_ex, 0);
+      
       if ($numsockets === false)
       { // es un error grave. Por el momento no captamos este error, solo cerramos todo y notificamos
         print 'Error grave general de la aplicación en cliente'."\n";
@@ -83,16 +85,23 @@ class Client extends \Thread
 
       // Si no hay nada nuevo, nada que hacer
       if ($numsockets === 0)
-        continue;
+      {
+        // protocol timeouts
+        if ($context->lastaccesstime < microtime(true) - $context->timeout)
+        {
+          // We got a timeout, close the socket and the thread
+          break;
+        }
+        else
+          continue;
+      }
 
       foreach ($readers as $reader)
       {
         // solo hay un reader possible, en modo lectura, no aceptamos sockets nuevos aqui
         
         // leemos nuestro buffer en modo binario
-// **** deberia de usar buffer size del protocolo
-        $input = @socket_read($reader, 2048);
-
+        $input = @socket_read($reader, $this->listener->bufferlength);
         // 4 = Interrupted system call
         // En este caso el sistema se va a cerrar automaticamente
         if ($input === false && socket_last_error() != 4)
@@ -112,6 +121,8 @@ class Client extends \Thread
           break 2;
         }
         
+        $context->lastaccesstime = microtime(true);
+        $context->state = 1;
         foreach($this->modules as $module) $module->receivedata($context, $input);
         $data = $this->protocol->process($context, $input);
 
@@ -149,7 +160,7 @@ class Client extends \Thread
     $this->hasrunned = true;
     
     /* start hooks: */
-    $context->stop = microtime();
+    $context->stop = microtime(true);
     foreach($this->modules as $module) $module->stop($context);
   }
 }

@@ -1,4 +1,4 @@
-# WAWAS - The WebAbility(r) PHP Web and Application Server v1.0.3
+# WAWAS - The WebAbility(r) PHP Web and Application Server v1.0.4
 
 [![Average time to resolve an issue](http://isitmaintained.com/badge/resolution/webability/WAWAS.svg)](http://isitmaintained.com/project/webability/WAWAS "Average time to resolve an issue")
 [![Percentage of issues still open](http://isitmaintained.com/badge/open/webability/WAWAS.svg)](http://isitmaintained.com/project/webability/WAWAS "Percentage of issues still open")
@@ -57,8 +57,14 @@ cd /home/sites/wawas
 php7 runner.php
 ```
 
-I am working on a wawasctl to put in your /etc/init.d or similar.
+### Or run the server as a daemon:
 
+Configure in server.conf <daemon><state>1</state>...
+to run in daemon mode, or the wawasctl will wait for any CTRL-C to finish
+
+```bash
+./wawasctl start
+```
 
 ---
 
@@ -110,6 +116,16 @@ I am working on a wawasctl to put in your /etc/init.d or similar.
 ---
 
 ## Version Changes Control
+
+### Build 4 2015/12/??
+- wawasctl included to start as a daemon
+- buffer output catch on protocol to send notice/warning/errors to client
+- ModuleAdmin is now a subset of Xamboo application server
+- /include/admin added for administration application
+- siteadmin added for administration root directory, JS and CSS added
+- HTTP11 protocol timeouts and max petitions implemented
+- Added context->petitions to know number of petitions of the thread, available on admin too
+- listener bufferlenght implemented
 
 ### Build 3 2015/12/02
 - The engine has been totally rewritten for PHP7, namespaces, pthreads v3, and is now really multithreaded.

@@ -42,7 +42,8 @@ class ModuleAdmin extends Module
   public function loop($counter)
   {
     $data = $this->read(0);
-    $data['counter'] = $counter;
+    // c = global counter
+    $data['c'] = $counter;
     $this->write(0, $data);
   }
   
@@ -52,20 +53,24 @@ class ModuleAdmin extends Module
 
     $data = $this->read(1);
     if (!isset($data[$threadid]))
+    {
       $data[$threadid] = true;
+      // i = input, o = output, a = start time, l = last access time,
+      // u = url serving, t = ip, p = port, 
+      // m = time of calculation
+      // n = number of petitions
+      $datathread = array('i' => 0, 'o' => 0, 'a' => microtime(true), 'l' => microtime(true), 'u' => '', 't' => $context->REMOTE_ADDR, 'p' => $context->REMOTE_PORT, 'm' => 0, 'n' => $context->petitions);
+      $this->write($threadid, $datathread);
+    }
     $this->write(1, $data);
   }
 
   public function receivedata($context, $input)
   {
     $threadid = $context->threadid;
-
     $data = $this->read($threadid);
-    if (!$data)
-    {
-      $data = array('input' => 0, 'output' => 0);
-   }
-    $data['input'] += strlen($input);
+    $data['i'] += strlen($input);
+    $data['l'] = microtime(true);
     $this->write($threadid, $data);
   }
 
@@ -73,9 +78,28 @@ class ModuleAdmin extends Module
   {
     $threadid = $context->threadid;
     $data = $this->read($threadid);
-    $data['output'] += strlen($output);
+    $data['o'] += strlen($output);
+    $data['l'] = microtime(true);
     $this->write($threadid, $data);
   }
+
+  public function preprocess($context) // $host, $request, $response)
+  {
+    $threadid = $context->threadid;
+    $data = $this->read($threadid);
+    $data['u'] = $context->request->vhost . $context->request->http['request'];
+    $this->write($threadid, $data);
+  }
+
+  public function postprocess($context) // $host, $request, $response)
+  {
+    $threadid = $context->threadid;
+    $data = $this->read($threadid);
+    $data['m'] = $context->runtime;
+    $data['n'] = $context->petitions;
+    $this->write($threadid, $data);
+  }
+  
 
   public function process($context) // $host, $request, $response)
   {

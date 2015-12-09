@@ -18,8 +18,7 @@ body
 .floatbox
 {
   float: left; 
-  width: 300px;
-  height: 300px;
+  width: 600px;
   overflow-y: auto;
   border: 1px solid grey;
   border-radius: 5px;

@@ -1,4 +1,8 @@
 <div class="floatbox">
+  General Counter: <span id="counter"></span> main server loops<br />
+</div>
+
+<div class="floatbox">
   Threads: <span id="numthreads"></span><br />
   List:<br />
   <div id="listthreads"></div>
@@ -31,7 +35,7 @@ foreach($base->context->modules as $mod => $mdata)
 
 $TEXT .= <<<EOF
   <h1>ADMIN SYSTEM</h1>
-  Counter: {$loaded['counter']}
+  Counter: {$loaded['c']}
   <table border="1"><tr><td style="vertical-align: top;">
   <pre>
 Loaded: <b>{$loadedtext}</b><br />
