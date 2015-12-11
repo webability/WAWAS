@@ -20,8 +20,11 @@ class getdata extends \xamboo\XBLibrary
     $data = array(
       'status' => 'OK',
       'counter' => $general['c'],
+      'counterpetitions' => $general['p'],
       'time' => microtime(true),
-      'threads' => array()
+      'threads' => array(),
+      'petitions' => $general['petitions'],
+      'load' => sys_getloadavg()
       );
 
     $threads = $this->base->read(1);

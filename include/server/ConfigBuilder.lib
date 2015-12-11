@@ -4,8 +4,8 @@ namespace server;
 
 class ConfigBuilder
 {
-  private $definitionfile = 'conf/def/main.xml';
-  private $definitiondir = 'conf/def/extra/';
+  private $definitionfile = 'include/configdef/main.xml';
+  private $definitiondir = 'include/configdef/extra/';
 
   private $definition = null;
   private $config = null;
@@ -132,7 +132,14 @@ class ConfigBuilder
     foreach($def as $p => $v)
     {
       if (sizeof($config->$p) == 0)
-        $result[$p] = null;
+      {
+        if ($v['attributes']['mandatory'] && $v['attributes']['mandatory'] == 'yes')
+        {
+          $result[$p] = $this->parseLevel($p, $v, $v['data']);
+        }
+        else
+          $result[$p] = null;
+      }
       elseif (sizeof($config->$p) > 1 && (!isset($v['attributes']['loop']) || $v['attributes']['loop'] != 'yes'))
       {
         // A tag can be fragmented between various files
@@ -166,7 +173,7 @@ class ConfigBuilder
         $val = $this->parse($v['children'], $config);
       }
     }
-     else
+    else
     {
       // it's a value
       $val = sprintf($config);

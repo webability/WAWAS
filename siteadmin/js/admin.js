@@ -6,7 +6,7 @@
 
 var WAWAS = { version: '1.0.0',
               devel: false,
-              recon_time: 500 // fetch info every 1 sec
+              recon_time: 100 // fetch info every 1 sec
 
             };
 
@@ -74,6 +74,11 @@ WAWAS.builddata = function(data)
 {
   WA.toDOM('numthreads').innerHTML = data.threads.length;
   WA.toDOM('counter').innerHTML = data.counter;
+  WA.toDOM('counterpetitions').innerHTML = data.counterpetitions;
+  WA.toDOM('load1').innerHTML = data.load[0];
+  WA.toDOM('load5').innerHTML = data.load[1];
+  WA.toDOM('load15').innerHTML = data.load[2];
+
   var time = data.time;
   var txt = '';
   for (var i = 0; i < data.threads.length; i++)
@@ -88,6 +93,16 @@ WAWAS.builddata = function(data)
     txt += '<div style="border: 1px solid #ddd; padding: 5px; margin-top: 5px;"><a href="/threads/'+data.threads[i].id+'">' + data.threads[i].id + '</a>: I/'+ I + ' - O/' + O + ' - ' + start + ' - ' + last + ' #' + data.threads[i].n + '<br />' + data.threads[i].t + ':' + data.threads[i].p + ' =&gt; ' + data.threads[i].u + ' in ' + runtime + '</div>';
   }
   WA.toDOM('listthreads').innerHTML = txt;
+
+  txt = '';
+  for (var i = 0; i < data.petitions.length; i++)
+  {
+    // filter local getdata petitions
+//    if (data.petitions[i].indexOf("listeners/getdata") > -1)
+//      continue;
+    txt += '<div>' + data.petitions[i] + '</div>';
+  }
+  WA.toDOM('listpetitions').innerHTML = txt;
 }
 
 

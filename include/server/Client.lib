@@ -45,24 +45,35 @@ class Client extends \Thread
     $context->threadid = $this->getThreadId();
     $context->modules = $this->modules;
     $context->listener = $this->listener;
+    $context->protocol = $this->protocol;
     $context->start = microtime(true);
     $context->lastaccesstime = microtime(true);
     $context->hits = 0;
     $context->close = false;
     $ip = $port = null;
-    socket_getpeername($this->socket, $ip, $port);
-    $context->REMOTE_ADDR = $ip;
-    $context->REMOTE_PORT = $port;
-    
-    /* start hooks: */
-    foreach($this->modules as $module) $module->start($context);
+    $peer = @socket_getpeername($this->socket, $ip, $port);
 
+    $mainloop = true;
+    if (!$peer)
+    {
+      $context->close = true;
+      $mainloop = false; // we quit the loop even before starting: the client has disconnect even before full connection
+    }
+    else
+    {
+      $context->REMOTE_ADDR = $ip;
+      $context->REMOTE_PORT = $port;
+      
+      /* start hooks: */
+      foreach($this->modules as $module) $module->start($context);
+    }
+
+    
     // ********
     // aqui deberiamos de calcular el HOST remote, si esta anclado en módulo
 
     // el run se vuelve el loop prinipal del collectable
     // Salimos cuando se desconecta el cliente (o nos forzamos a desconectar)
-    $mainloop = true;
     // El ciclo es "infinito" hasta recibir una señal para matar el proceso
     while ($mainloop)
     {
@@ -72,8 +83,10 @@ class Client extends \Thread
       $readers = array($this->socket);
       $_wr = null;
       $_ex = null;
+
       // Solicitamos el estatus general de todos los sockets
-      $numsockets = socket_select($readers, $_wr, $_ex, 0);
+      // 1 sec timeout to spare PHP time which is costy
+      $numsockets = socket_select($readers, $_wr, $_ex, 1, 0);
       
       if ($numsockets === false)
       { // es un error grave. Por el momento no captamos este error, solo cerramos todo y notificamos
@@ -140,14 +153,14 @@ class Client extends \Thread
           $len = strlen($data);
           while ($len > 0)
           {
-            $writen = socket_write($this->socket, $data, $len);
+            $writen = @socket_write($this->socket, $data, $len);
             if ($writen === false)
               break 3; // socket error, we break anything
             if ($writen == $len)
-              break;
+              break; // ready, all writen
             $data = substr($data, $writen);
             $len -= $writen;
-            // esperamos 1000 microsegundos. No seamos greedy
+            // esperamos 1000 microsegundos. No seamos greedy, network is not that fast after all
             $this->synchronized(function($thread) { $thread->wait(1000); }, $this);
           }
         }

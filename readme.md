@@ -126,6 +126,11 @@ to run in daemon mode, or the wawasctl will wait for any CTRL-C to finish
 - HTTP11 protocol timeouts and max petitions implemented
 - Added context->petitions to know number of petitions of the thread, available on admin too
 - listener bufferlenght implemented
+- enhancement of SHM, mutex, semaphore and concurrency to make sure SHM is not corrupted under heavy load
+- Added config parameter keepalive in vhost configuration
+- Enhanced sockets control to ignore warnings on unexpected disconnection
+- Error control on HTTP11Protocol->process has been improved for bad formed headers
+- Definition of configuration files have been moved to include/configdef so it's easy to upgrade without moving the actual configuration
 
 ### Build 3 2015/12/02
 - The engine has been totally rewritten for PHP7, namespaces, pthreads v3, and is now really multithreaded.

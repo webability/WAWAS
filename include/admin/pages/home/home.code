@@ -1,5 +1,10 @@
 <div class="floatbox">
-  General Counter: <span id="counter"></span> main server loops<br />
+  General Server Loops Count: <span id="counter"></span> (min 1 each s), <span id="counterpetitions"></span> total petitions served, Load: <span id="load1"></span>, <span id="load5"></span>, <span id="load15"></span>
+</div>
+
+<div class="floatbox" style="overflow-y: auto;">
+  Petitions log:<br />
+  <div id="listpetitions"></div>
 </div>
 
 <div class="floatbox">

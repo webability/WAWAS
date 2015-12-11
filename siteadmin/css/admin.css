@@ -12,13 +12,14 @@ body
   font-size: 12px;
   -webkit-font-smoothing: antialiased;
   margin: 0;
+  color: #333;
 }
 
 
 .floatbox
 {
   float: left; 
-  width: 600px;
+  width: 90%;
   overflow-y: auto;
   border: 1px solid grey;
   border-radius: 5px;
@@ -26,3 +27,9 @@ body
   
 }
 
+#counter, #counterpetitions, #load1, #load5, #load15
+{
+  font-weight: bold;
+  color: black;
+  font-size: 1.2em;
+}

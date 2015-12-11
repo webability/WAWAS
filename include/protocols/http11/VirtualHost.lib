@@ -9,6 +9,7 @@ final class VirtualHost extends \Threaded
   public $documentroot;
   public $directoryindex;
   public $modules;
+  public $keepalive;
   
   private $errors = array();
 
@@ -19,6 +20,7 @@ final class VirtualHost extends \Threaded
     $this->documentroot = $localconfig->documentroot?:$default->documentroot;
     $this->directoryindex = $localconfig->directoryindex?:$default->directoryindex;
     $this->hostnames = $localconfig->hostname;
+    $this->keepalive = $localconfig->keepalive;
 
     // Make hostnames absolute (name:port)
     foreach($this->hostnames as $k => $hostname)

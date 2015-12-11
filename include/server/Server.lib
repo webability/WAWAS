@@ -134,8 +134,8 @@ class Server
         $readers = $this->getReaders();
         $_wr = null;
         $_ex = null;
-        // Solicitamos el estatus general de todos los sockets
-        $numsockets = socket_select($readers, $_wr, $_ex, 0);
+        // Solicitamos el estatus general de todos los sockets, 1 sec timeout
+        $numsockets = socket_select($readers, $_wr, $_ex, 1, 0);
         if ($numsockets === false)
         { // es un error grave. Por el momento no captamos este error, solo cerramos todo y notificamos
           print 'Error grave general de la aplicación'."\n";

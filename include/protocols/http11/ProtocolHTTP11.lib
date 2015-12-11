@@ -9,6 +9,8 @@ namespace protocols\http11;
 
 final class ProtocolHTTP11 extends \protocols\Protocol
 {
+  public $petitions = 0;
+  
   private $maxheadersize;
   private $maxheaders;
   private $maxpetitions;
@@ -88,32 +90,33 @@ final class ProtocolHTTP11 extends \protocols\Protocol
   {
     $this->hits++;
     $context->hits ++;
-    
-    if (!$context->request->synchro)
-    {
-      $context->request->tempbuffer .= $data;
-      if (!preg_match($this->protocolmatch, $context->request->tempbuffer))
-      {
-        if (strlen($context->request->tempbuffer) > $context->request->maxheadersize)
-        {
-          // log it
-
-          // escribe error 40x headers too large
-          $context->response->setResponse(401, 'Header too large');
-          throw new \Error('The received header is too large too large (Max size: ' . $context->request->maxheadersize . ')');
-          // close thread (had an error, we dont want anymore data from here) ??????
-//********
-        }
-        return;
-      }
-      // Tenemos synchro, es decir reconocimos el protócolo.
-      $context->request->synchro = true;
-      $data = $context->request->tempbuffer;
-      $context->request->tempbuffer = '';
-    }
+    $mb = microtime(true);
 
     try
     {
+      if (!$context->request->synchro)
+      {
+        $context->request->tempbuffer .= $data;
+        if (!preg_match($this->protocolmatch, $context->request->tempbuffer))
+        {
+          if (strlen($context->request->tempbuffer) > $context->maxheadersize)
+          {
+            // log it
+
+            // escribe error 40x headers too large
+            $context->response->setResponse(401, 'Header too large');
+            throw new \Error('The received header is too large too large (Max size: ' . $context->maxheadersize . ')');
+            // close thread (had an error, we dont want anymore data from here) ??????
+  //********
+          }
+          return;
+        }
+        // Tenemos synchro, es decir reconocimos el protócolo.
+        $context->request->synchro = true;
+        $data = $context->request->tempbuffer;
+        $context->request->tempbuffer = '';
+      }
+
       if (!$context->request->hasheaders)
       {
         $context->request->rawheaders .= $data;
@@ -220,7 +223,10 @@ final class ProtocolHTTP11 extends \protocols\Protocol
         $output = ob_get_clean();
         $me = microtime(true);
         $context->runtime = $me-$mb;
+        // this thread petitions;
         $context->petitions++;
+        // total global petitions:
+        $this->petitions++;
         // concatenate errors to body 
         /// **********SHOULD BE A PARAMETER: A LOG, BEFORE, AFTER, SILENT
         if ($output)
@@ -245,8 +251,8 @@ final class ProtocolHTTP11 extends \protocols\Protocol
         // reinit the thread for next petition
         $data = $this->buildResponseHeader($context->response) . $context->response->body;
 
-        // http 1.0 does not have a connection header
-        if (!isset($context->request->headers['connection']) || $context->request->headers['connection'] == 'close')
+        // http 1.0 does not have a connection header, or host keepalive = false
+        if (!isset($context->request->headers['connection']) || $context->request->headers['connection'] == 'close' || !$context->host->keepalive)
         {
           $context->close = true;
         }

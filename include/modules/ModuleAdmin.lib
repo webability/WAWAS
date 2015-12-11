@@ -25,7 +25,7 @@ class ModuleAdmin extends Module
   // The init method called once at the beginning of the server
   public function init($modules, $protocols, $listeners) 
   {
-    $data = array();
+    $data = array('c' => 0, 'p' => 0);
     // crea el shared segment 0, con los datos basicos
     foreach($modules as $module)
       $data['modules'][] = $module->name;
@@ -33,6 +33,7 @@ class ModuleAdmin extends Module
       $data['protocols'][] = $protocol->name;
     foreach($listeners as $listener)
       $data['listeners'][] = $listener->name;
+    $data['petitions'] = array();
     
     $this->write(0, $data);
     $this->write(1, array());
@@ -41,7 +42,7 @@ class ModuleAdmin extends Module
   // The loop method is informative only for the module called each loop
   public function loop($counter)
   {
-    $data = $this->read(0);
+    $data = $this->readlock(0);
     // c = global counter
     $data['c'] = $counter;
     $this->write(0, $data);
@@ -51,7 +52,7 @@ class ModuleAdmin extends Module
   {
     $threadid = $context->threadid;
 
-    $data = $this->read(1);
+    $data = $this->readlock(1);
     if (!isset($data[$threadid]))
     {
       $data[$threadid] = true;
@@ -60,7 +61,7 @@ class ModuleAdmin extends Module
       // m = time of calculation
       // n = number of petitions
       $datathread = array('i' => 0, 'o' => 0, 'a' => microtime(true), 'l' => microtime(true), 'u' => '', 't' => $context->REMOTE_ADDR, 'p' => $context->REMOTE_PORT, 'm' => 0, 'n' => $context->petitions);
-      $this->write($threadid, $datathread);
+      $this->writelock($threadid, $datathread);
     }
     $this->write(1, $data);
   }
@@ -68,7 +69,7 @@ class ModuleAdmin extends Module
   public function receivedata($context, $input)
   {
     $threadid = $context->threadid;
-    $data = $this->read($threadid);
+    $data = $this->readlock($threadid);
     $data['i'] += strlen($input);
     $data['l'] = microtime(true);
     $this->write($threadid, $data);
@@ -77,7 +78,7 @@ class ModuleAdmin extends Module
   public function senddata($context, $output)
   {
     $threadid = $context->threadid;
-    $data = $this->read($threadid);
+    $data = $this->readlock($threadid);
     $data['o'] += strlen($output);
     $data['l'] = microtime(true);
     $this->write($threadid, $data);
@@ -86,20 +87,30 @@ class ModuleAdmin extends Module
   public function preprocess($context) // $host, $request, $response)
   {
     $threadid = $context->threadid;
-    $data = $this->read($threadid);
+    $data = $this->readlock($threadid);
     $data['u'] = $context->request->vhost . $context->request->http['request'];
     $this->write($threadid, $data);
+
+    $data = $this->readlock(0);
+    if ($context->request->http['request'] != '/listeners/getdata')
+    {
+      // We do not log ourself (lots of unnecesary noise)
+      $data['petitions'][] = $context->request->vhost . $context->request->http['request'];
+      if (sizeof($data['petitions']) > 10)
+        array_shift($data['petitions']);
+    }
+    $data['p'] = $context->protocol->petitions;
+    $data = $this->write(0, $data);
   }
 
   public function postprocess($context) // $host, $request, $response)
   {
     $threadid = $context->threadid;
-    $data = $this->read($threadid);
+    $data = $this->readlock($threadid);
     $data['m'] = $context->runtime;
     $data['n'] = $context->petitions;
     $this->write($threadid, $data);
   }
-  
 
   public function process($context) // $host, $request, $response)
   {
@@ -245,7 +256,7 @@ EOF;
   {
     $threadid = $context->threadid;
 
-    $data = $this->read(1);
+    $data = $this->readlock(1);
     if (isset($data[$threadid]))
     {
       unset($data[$threadid]);
@@ -261,11 +272,14 @@ EOF;
   private function attach()
   {
     if (!self::$shm)
-      self::$shm = shm_attach($this->shmid, $this->shmsize);    
-    self::$sem = sem_get($this->shmid, 1, 0666, -1); 
-    $res = sem_acquire(self::$sem);
-    if (!$res)
-      throw new \Error('Error: could not acquire Semaphore');
+      self::$shm = shm_attach($this->shmid, $this->shmsize);
+    if (!self::$sem)
+    { // No tenemos lock aun
+      self::$sem = sem_get($this->shmid, 1, 0666, -1); 
+      $res = sem_acquire(self::$sem);
+      if (!$res)
+        throw new \Error('Error: could not acquire Semaphore');
+    }
   }
 
   private function detach()
@@ -274,20 +288,32 @@ EOF;
     self::$sem = null;
   }
 
-  private function write($id, $data)
+  private function write($id, $data, $norelease = false)
   {
     $this->attach();
     if (!shm_put_var(self::$shm, $id, $data))
       throw new \Error('Error: could not write SHM');
-    $this->detach();
+    if (!$norelease)
+      $this->detach();
   }
 
-  private function read($id)
+  private function read($id, $norelease = false)
   {
     $this->attach();
     $data = @shm_get_var(self::$shm, $id);
-    $this->detach();
+    if (!$norelease)
+      $this->detach();
     return $data;
+  }
+
+  private function readlock($id)
+  {
+    return $this->read($id, true);
+  }
+
+  private function writelock($id, $data)
+  {
+    $this->write($id, $data, true);
   }
 
   private function flush()
