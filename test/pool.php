@@ -1,5 +1,6 @@
 <?php
 
+/*
 declare(ticks=1);
 
 // A function called on each tick event
@@ -11,6 +12,7 @@ function tick_handler()
 }
 
 register_tick_function('tick_handler');
+*/
 
 class WebWork extends Worker
 {
@@ -27,9 +29,7 @@ class WebWork extends Worker
 
     for ($a = 1; $a < 5; $a++)
     {
-      $x = file_get_contents('http://adminwawas.webability.org:81');
-      
-      print "Load en webwork {$this->num}::{$a} terminado\n";
+      $x = @file_get_contents('http://127.0.0.1:99');
       $this->wait();
     }
 
@@ -37,11 +37,11 @@ class WebWork extends Worker
   }
 }
 
-$pool = new Pool(100);
+$pool = new Pool(250);
 
 
 
-for ($a = 1; $a < 200000; $a++)
+for ($a = 1; $a < 1000000; $a++)
 {
   $pool->submit(new WebWork($a));
 }

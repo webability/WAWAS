@@ -11,9 +11,12 @@ class Listener
   public $name;
   public $ip;
   public $port;
+  public $tls;
   public $maxconnections;
   public $bufferlength;
   public $protocol;
+  
+  public $TLSEngine = null;
   
   public $socket = null;
   
@@ -22,9 +25,16 @@ class Listener
     $this->name = $localconfig->name;
     $this->ip = $localconfig->ip?:$default->ip;
     $this->port = $localconfig->port?:$default->port;
+    $this->tls = $localconfig->tls;
     $this->maxconnections = $localconfig->maxconnections?:$default->maxconnections;
     $this->bufferlength = $localconfig->bufferlength?:$default->bufferlength;
     $this->protocol = $localconfig->protocol?:$default->protocol;
+    
+    if ($this->tls)
+    {
+      // setup the TLS (SSL) engine
+      $this->TLSEngine = new TLSEngine($localconfig);
+    }
   }
   
   public function start()

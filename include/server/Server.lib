@@ -171,6 +171,7 @@ class Server
          // Debemos de cerrar los listeners de una vez para que los que se conectan sepan que ya no los queremos
         
       }
+      
 
       // limpia los threads del pooler
       foreach($this->clients as $k => $client)
@@ -201,7 +202,10 @@ class Server
       $maincounter++;
       /* yet another loop: */
       foreach($this->modules as $module) $module->loop($maincounter);
-      
+
+      if ($maincounter % 500 == 0)
+        print "Clients #: ".sizeof($this->clients) . " - " . (memory_get_usage()/1000000) . "MB\n";
+
       // shutdown limpio, terminamos de servir los clientes
       if ($this->shutdown && sizeof($this->clients) == 0)
       {

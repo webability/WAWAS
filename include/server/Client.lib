@@ -115,6 +115,7 @@ class Client extends \Thread
         
         // leemos nuestro buffer en modo binario
         $input = @socket_read($reader, $this->listener->bufferlength);
+
         // 4 = Interrupted system call
         // En este caso el sistema se va a cerrar automaticamente
         if ($input === false && socket_last_error() != 4)
@@ -136,8 +137,24 @@ class Client extends \Thread
         
         $context->lastaccesstime = microtime(true);
         $context->state = 1;
-        foreach($this->modules as $module) $module->receivedata($context, $input);
-        $data = $this->protocol->process($context, $input);
+
+        // SSL engine ON: we work here and modify the input
+        // take in charge handshake, certificates etc.
+        // Only when the content is clear, pass it through to protocol
+        $datareadable = true;
+        $data = null;
+        if ($this->listener->tls)
+        {
+//          var_dump($input);
+          
+          $this->listener->TLSEngine->process($input);
+          $datareadable = false;
+        }
+        if ($datareadable)
+        {
+          foreach($this->modules as $module) $module->receivedata($context, $input);
+          $data = $this->protocol->process($context, $input);
+        }
 
         // regresamos al cliente lo procesado
 // *****************************************************        

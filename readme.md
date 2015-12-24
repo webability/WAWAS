@@ -1,4 +1,4 @@
-# WAWAS - The WebAbility(r) PHP Web and Application Server v1.0.4
+# WAWAS - The WebAbility(r) PHP Web and Application Server v1.0.5
 
 [![Average time to resolve an issue](http://isitmaintained.com/badge/resolution/webability/WAWAS.svg)](http://isitmaintained.com/project/webability/WAWAS "Average time to resolve an issue")
 [![Percentage of issues still open](http://isitmaintained.com/badge/open/webability/WAWAS.svg)](http://isitmaintained.com/project/webability/WAWAS "Percentage of issues still open")
@@ -6,7 +6,10 @@
 
 
 This is a real multithreaded application server 100% coded in PHP 7.
+
 It uses the pthreads PECL extension, in CLI mode.
+
+It integrates the Xamboo CMS Framework and is build on top of the DomCore PHP Fundation Classes.
 
 ---
 
@@ -89,7 +92,7 @@ to run in daemon mode, or the wawasctl will wait for any CTRL-C to finish
 - mod_static => check mimes types and errors
 - mod_file => DO !
 - mod_admin => generate the full admin site, hooks, realtile stats/JSON (Comet?) based on Xamboo
-- mod_log => log on vhosts and 
+- mod_log => log on vhosts and others
 - mod_php => use sandbox ? capture output, errors control, namespaces, overload classes ?
 - mod_xamboo => integrates SERVER-APP variables (ej. REMOTE_HOST, REMOTE_ADDR, etc)
 
@@ -111,13 +114,15 @@ to run in daemon mode, or the wawasctl will wait for any CTRL-C to finish
 ### Admin
 - Implement admin console fully realtime
 
-
-
 ---
 
 ## Version Changes Control
 
-### Build 4 2015/12/??
+### Build 5 2015/12/??
+- tls parameter added in the listener definition
+- TLSEngine created and implemented into the client, still working on structures
+
+### Build 4 2015/12/10
 - wawasctl included to start as a daemon
 - buffer output catch on protocol to send notice/warning/errors to client
 - ModuleAdmin is now a subset of Xamboo application server
@@ -131,6 +136,8 @@ to run in daemon mode, or the wawasctl will wait for any CTRL-C to finish
 - Enhanced sockets control to ignore warnings on unexpected disconnection
 - Error control on HTTP11Protocol->process has been improved for bad formed headers
 - Definition of configuration files have been moved to include/configdef so it's easy to upgrade without moving the actual configuration
+- Sockets timeouts adjusted so the execution is extremely light on CPU load 
+- Added box load into the admin system
 
 ### Build 3 2015/12/02
 - The engine has been totally rewritten for PHP7, namespaces, pthreads v3, and is now really multithreaded.
@@ -154,3 +161,24 @@ This version "works" more or less, and may have lots of bugs.
 This is not a stable version or an official release.
 Do not use it for production sites.
 
+---
+
+## Basic Manual
+
+---
+
+## Configuration Reference
+
+---
+
+## Protocols Reference
+
+## Modules manual
+
+## DomCore Manual
+
+[![Manual]](http://www.webability.info/?P=documentacion&wiki=/DomCore)
+
+## Xamboo Manual
+
+[![Manual]](http://www.webability.info/?P=documentacion&wiki=/Xamboo)

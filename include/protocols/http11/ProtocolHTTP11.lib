@@ -99,13 +99,13 @@ final class ProtocolHTTP11 extends \protocols\Protocol
         $context->request->tempbuffer .= $data;
         if (!preg_match($this->protocolmatch, $context->request->tempbuffer))
         {
-          if (strlen($context->request->tempbuffer) > $context->maxheadersize)
+          if (strlen($context->request->tempbuffer) > $this->maxheadersize)
           {
             // log it
 
             // escribe error 40x headers too large
             $context->response->setResponse(401, 'Header too large');
-            throw new \Error('The received header is too large too large (Max size: ' . $context->maxheadersize . ')');
+            throw new \Error('The received header is too large too large (Max size: ' . $this->maxheadersize . ')');
             // close thread (had an error, we dont want anymore data from here) ??????
   //********
           }
