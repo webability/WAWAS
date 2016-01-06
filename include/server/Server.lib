@@ -8,7 +8,7 @@ namespace server;
 
 class Server
 {
-  const VERSION = '1.0.4';
+  const VERSION = '1.0.5';
   
   // main system configuration
   private $config;
@@ -17,6 +17,7 @@ class Server
   private $shutdown = false;
 
   // All the known modules (system wide)
+  private $serverthreads = array();
   private $modules;
   private $protocols = array();
   private $listeners = array();
@@ -64,6 +65,18 @@ class Server
       $protoname = "\\protocols\\".$protocol['lib'];
       $this->protocols[$protocol['name']] = new $protoname($protocol, $config, $this->listeners);
     }
+    
+    foreach($this->listeners as $k => $listener)
+    {
+      if ($listener->tlsstream)
+      {
+        $server = new ServerThread($this->config, $this->modules, $this->protocols, $listener, $listener->socket);
+        $server->start();
+        $this->serverthreads[] = $server;
+        unset($this->listeners[$k]);
+      }
+    }
+    
   }
 
   public function addListener($lconfig, $default)
@@ -119,10 +132,6 @@ class Server
     // El ciclo es "infinito" hasta recibir una señal para matar el proceso
     while ($mainloop)
     {
-      // Esperamos 1 ms entre cada loop ( o lo que la máquina quiera darnos )
-      // para darle tiempo al OS de hacer lo demás que tiene que hacer y no ser codiciosos en CPU
-      // solo para no tener nuestro programa usando 100% CPU constantemente ;)
-      _sleep(1000);
       // permitimos a las señales pasar por el sistema e interpretarlas.
       pcntl_signal_dispatch();
 
@@ -134,7 +143,22 @@ class Server
         $readers = $this->getReaders();
         $_wr = null;
         $_ex = null;
+        
+/***********************************
+// stream try, not working (see explanation in listener.lib)
         // Solicitamos el estatus general de todos los sockets, 1 sec timeout
+        foreach($readers as $mastersocket)
+        {
+          // we cant wait for every socket or block others, no timeout
+          while ($socket = @stream_socket_accept($mastersocket,0))
+          {
+            print "Client added $socket on $mastersocket \n";
+            $this->addClient($socket, $this->modules, $this->protocols[$this->listeners[(string)$mastersocket]->protocol], $this->listeners[(string)$mastersocket]);
+
+          }
+        }
+*/
+
         $numsockets = socket_select($readers, $_wr, $_ex, 1, 0);
         if ($numsockets === false)
         { // es un error grave. Por el momento no captamos este error, solo cerramos todo y notificamos
@@ -155,8 +179,6 @@ class Server
               while ( ( $socket = @socket_accept($reader) ) !== false)
               {
 // We are subject to the maxconnections parameter (server/listener). If we pass the quantity of clients, we should "wait" ? "close" ? (we cannot send an error: no protocol recognized)
-                
-                
                 // start a thread to listen to this socket
                 $this->addClient($socket, $this->modules, $this->protocols[$this->listeners[(string)$reader]->protocol], $this->listeners[(string)$reader]);
               }
@@ -165,35 +187,34 @@ class Server
             }
           }
         }
+        unset($readers);
       }
       else
       {  // modo shutdown. 
          // Debemos de cerrar los listeners de una vez para que los que se conectan sepan que ya no los queremos
-        
+        foreach($this->clients as $k => $client)
+          $client->shutdown();
+        print "SHUTDOWN EN CURSO";
       }
-      
 
       // limpia los threads del pooler
       foreach($this->clients as $k => $client)
       {
-        /*
-        print $k;
-        var_dump($client->isTerminated());
-        var_dump($client->hasRunned());
-        print PHP_EOL;
-        */
         if ($client->isTerminated())
         {
-          // notificar crashed thread id 
+          // notificar crashed thread id
           $id = $client->getThreadId();
           
           print "Client crashed: " . $k . ' - ' . $id . "\n";
-//          var_dump($client->getTerminationInfo());
+//          fclose($client->getSocket());
+//          socket_shutdown($client->getSocket(), 2);
           socket_close($client->getSocket());
           unset($this->clients[$k]);
         }
         else if ($client->hasRunned())
         {
+//          fclose($client->getSocket());
+//          socket_shutdown($client->getSocket(), 2);
           socket_close($client->getSocket());
           unset($this->clients[$k]);
         }
@@ -203,8 +224,8 @@ class Server
       /* yet another loop: */
       foreach($this->modules as $module) $module->loop($maincounter);
 
-      if ($maincounter % 500 == 0)
-        print "Clients #: ".sizeof($this->clients) . " - " . (memory_get_usage()/1000000) . "MB\n";
+//      if ($maincounter % 500 == 0)
+//        print "Clients #: ".sizeof($this->clients) . " - " . (memory_get_usage()/1000000) . "MB\n";
 
       // shutdown limpio, terminamos de servir los clientes
       if ($this->shutdown && sizeof($this->clients) == 0)

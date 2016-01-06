@@ -13,6 +13,7 @@ class Client extends \Thread
   private $modules;
   private $protocol;
   private $listener;
+  private $shutdown = false;
   
   private $hasrunned = false;
 
@@ -35,6 +36,11 @@ class Client extends \Thread
     return $this->hasrunned;
   }
   
+  public function shutdown()
+  {
+    $this->shutdown = true;
+  }
+  
   public function run()
   {
     // Prepara el thread
@@ -51,8 +57,15 @@ class Client extends \Thread
     $context->hits = 0;
     $context->close = false;
     $ip = $port = null;
-    $peer = @socket_getpeername($this->socket, $ip, $port);
-
+    if ($this->listener->tlsstream)
+    {
+      $peer = stream_socket_get_name($this->socket, true);
+      $xpeer = explode(':', $peer);
+      $ip = $xpeer[0]; $port = $xpeer[1];
+    }
+    else
+      $peer = @socket_getpeername($this->socket, $ip, $port);
+   
     $mainloop = true;
     if (!$peer)
     {
@@ -75,117 +88,180 @@ class Client extends \Thread
     // el run se vuelve el loop prinipal del collectable
     // Salimos cuando se desconecta el cliente (o nos forzamos a desconectar)
     // El ciclo es "infinito" hasta recibir una señal para matar el proceso
+      print "accepted " . @stream_socket_get_name( $this->socket, true) . " ";
+      print "OK OK\n";
     while ($mainloop)
     {
-      // esperamos 1000 microsegundos.
-      $this->synchronized(function($thread) { $thread->wait(1000); }, $this);
-      
-      $readers = array($this->socket);
-      $_wr = null;
-      $_ex = null;
-
-      // Solicitamos el estatus general de todos los sockets
-      // 1 sec timeout to spare PHP time which is costy
-      $numsockets = socket_select($readers, $_wr, $_ex, 1, 0);
-      
-      if ($numsockets === false)
-      { // es un error grave. Por el momento no captamos este error, solo cerramos todo y notificamos
-        print 'Error grave general de la aplicación en cliente'."\n";
-        $err = socket_last_error();
-        print 'Error on socket: '.$err. ' ' . socket_strerror($err) . "\n";
-        break;
-      }
-
-      // Si no hay nada nuevo, nada que hacer
-      if ($numsockets === 0)
+      if ($this->listener->tlsstream)
       {
-        // protocol timeouts
-        if ($context->lastaccesstime < microtime(true) - $context->timeout)
-        {
-          // We got a timeout, close the socket and the thread
-          break;
-        }
-        else
-          continue;
-      }
-
-      foreach ($readers as $reader)
-      {
-        // solo hay un reader possible, en modo lectura, no aceptamos sockets nuevos aqui
+        $this->synchronized(function($thread) { $thread->wait(1000); }, $this);
         
-        // leemos nuestro buffer en modo binario
-        $input = @socket_read($reader, $this->listener->bufferlength);
+        $input = fread($this->socket,$this->listener->bufferlength);
+   /*     
+[root@thomassigny wawas]# php7 runner.php
+TLS Stream engine ON
+STARTING TLS STREAM
+tls://162.243.131.169:82
+0
+UP OK
+Client added Resource id #7 on Resource id #35
+accepted 200.52.90.162:8298 OK OK
+Client added Resource id #9 on Resource id #35
+accepted 200.52.90.162:2880 OK OK
+Client added Resource id #10 on Resource id #35
+accepted 200.52.90.162:58874 OK OK
+string(4) "8152"
+string(1) "G"
+string(4) "8152"
+string(482) "ET / HTTP/1.1
+Host: wawas.webability.org:82
+Connection: keep-alive
+Cache-Control: max-age=0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,* /*;q=0.8
+Upgrade-Insecure-Requests: 1
+User-Agent: Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.106 Safari/537.36
+Accept-Encoding: gzip, deflate, sdch
+Accept-Language: es-419,es;q=0.8,en;q=0.6,fr;q=0.4,gl;q=0.2
+AlexaToolbar-ALX_NS_PH: AlexaToolbar/alxg-3.3
 
-        // 4 = Interrupted system call
-        // En este caso el sistema se va a cerrar automaticamente
-        if ($input === false && socket_last_error() != 4)
-        {
-          // the socket likely had an error and must be closed
-          // we should log this !
-// *****
+"
+PHP Warning:  fread(): SSL operation failed with code 1. OpenSSL Error messages:
+error:1409442E:SSL routines:SSL3_READ_BYTES:tlsv1 alert protocol version in /home/sites/base5/wawas/include/server/Client.lib on line 98
 
-// rompemos todo, error 
-          break 2;
-        }
+Warning: fread(): SSL operation failed with code 1. OpenSSL Error messages:
+error:1409442E:SSL routines:SSL3_READ_BYTES:tlsv1 alert protocol version in /home/sites/base5/wawas/include/server/Client.lib on line 98
+PHP Warning:  stream_socket_accept(): accept failed: Connection timed out in /home/sites/base5/wawas/include/server/ServerThread.lib on line 86
 
-        if ($input === '')
+Warning: stream_socket_accept(): accept failed: Connection timed out in /home/sites/base5/wawas/include/server/ServerThread.lib on line 86        
+  */      
+        if ($input)
         {
-          // Zero length string means disconnected by client
-          // so we destroy the client listener.
-          break 2;
-        }
-        
-        $context->lastaccesstime = microtime(true);
-        $context->state = 1;
-
-        // SSL engine ON: we work here and modify the input
-        // take in charge handshake, certificates etc.
-        // Only when the content is clear, pass it through to protocol
-        $datareadable = true;
-        $data = null;
-        if ($this->listener->tls)
-        {
-//          var_dump($input);
-          
-          $this->listener->TLSEngine->process($input);
-          $datareadable = false;
-        }
-        if ($datareadable)
-        {
+          $context->lastaccesstime = microtime(true);
+          $context->state = 1;
           foreach($this->modules as $module) $module->receivedata($context, $input);
           $data = $this->protocol->process($context, $input);
-        }
-
-        // regresamos al cliente lo procesado
-// *****************************************************        
-//***** SOPORTE PARA LOS CHUNKS HTTP 1.1!!!!!!!!!!!!!!!        
-// *****************************************************        
-// *****************************************************        
-// *****************************************************        
-        
-        if ($data)
-        {
-          foreach($this->modules as $module) $module->senddata($context, $data);
-
-          $len = strlen($data);
-          while ($len > 0)
+          if ($data)
           {
-            $writen = @socket_write($this->socket, $data, $len);
-            if ($writen === false)
-              break 3; // socket error, we break anything
-            if ($writen == $len)
-              break; // ready, all writen
-            $data = substr($data, $writen);
-            $len -= $writen;
-            // esperamos 1000 microsegundos. No seamos greedy, network is not that fast after all
-            $this->synchronized(function($thread) { $thread->wait(1000); }, $this);
+            foreach($this->modules as $module) $module->senddata($context, $data);
+            fwrite($this->socket, $data);
           }
+          // tenemos que cerrar este socket ?
+          if ($context->close)
+            break;
         }
-        
-        // tenemos que cerrar este socket ?
-        if ($context->close)
-          break 2;
       }
+      else
+      {
+        $readers = array($this->socket);
+        $_wr = null;
+        $_ex = null;
+
+        // Solicitamos el estatus general de todos los sockets
+        // 1 sec timeout to spare PHP time which is costy
+        
+        $numsockets = socket_select($readers, $_wr, $_ex, 1, 0);
+
+        if ($numsockets === false)
+        { // es un error grave. Por el momento no captamos este error, solo cerramos todo y notificamos
+          print 'Error grave general de la aplicación en cliente'."\n";
+          $err = socket_last_error();
+          print 'Error on socket: '.$err. ' ' . socket_strerror($err) . "\n";
+          break;
+        }
+
+        // Si no hay nada nuevo, nada que hacer
+        if ($numsockets === 0)
+        {
+          // protocol timeouts
+          if ($context->lastaccesstime < microtime(true) - $context->timeout)
+          {
+            // We got a timeout, close the socket and the thread
+            break;
+          }
+          else
+            continue;
+        }
+
+        foreach ($readers as $reader)
+        {
+          // solo hay un reader possible, en modo lectura, no aceptamos sockets nuevos aqui
+          
+          // leemos nuestro buffer en modo binario
+          $input = @socket_read($reader, $this->listener->bufferlength);
+
+          // 4 = Interrupted system call
+          // En este caso el sistema se va a cerrar automaticamente
+          if ($input === false && socket_last_error() != 4)
+          {
+            // the socket likely had an error and must be closed
+            // we should log this !
+  // *****
+
+  // rompemos todo, error 
+            break 2;
+          }
+
+          if ($input === '')
+          {
+            // Zero length string means disconnected by client
+            // so we destroy the client listener.
+            break 2;
+          }
+          
+          $context->lastaccesstime = microtime(true);
+          $context->state = 1;
+
+          // SSL engine ON: we work here and modify the input
+          // take in charge handshake, certificates etc.
+          // Only when the content is clear, pass it through to protocol
+          $datareadable = true;
+          $data = null;
+
+          if ($this->listener->tls)
+          {
+            $this->listener->TLSEngine->process($input);
+            $datareadable = false;
+          }
+          if ($datareadable)
+          {
+            foreach($this->modules as $module) $module->receivedata($context, $input);
+            $data = $this->protocol->process($context, $input);
+          }
+
+          // regresamos al cliente lo procesado
+  // *****************************************************        
+  //***** SOPORTE PARA LOS CHUNKS HTTP 1.1!!!!!!!!!!!!!!!        
+  // *****************************************************        
+  // *****************************************************        
+  // *****************************************************        
+          if ($data)
+          {
+            foreach($this->modules as $module) $module->senddata($context, $data);
+  //          stream_socket_sendto($this->socket, $data);
+            $len = strlen($data);
+            while ($len > 0)
+            {
+              $writen = @socket_write($this->socket, $data, $len);
+              if ($writen === false)
+                break 3; // socket error, we break anything
+              if ($writen == $len)
+                break; // ready, all writen
+              $data = substr($data, $writen);
+              $len -= $writen;
+              // esperamos 1000 microsegundos. No seamos greedy, network is not that fast after all
+              $this->synchronized(function($thread) { $thread->wait(1000); }, $this);
+            }
+          }
+          
+          // tenemos que cerrar este socket ?
+          if ($context->close)
+            break;
+        }
+      
+      }
+      // force shutdown.
+      if ($this->shutdown)
+        break;
     }
     $this->hasrunned = true;
     

@@ -77,10 +77,13 @@ to run in daemon mode, or the wawasctl will wait for any CTRL-C to finish
 - Hooks on modules (working on them)
 - implement maxs on #threads, #clients, #hits, sizes, headers etc
 
+### Protocol HTTP2:
+Analize, read, implement ?
+
 ### Protocol HTTP11:
 - Authentication
 - Chunks
-- SSL/HTTPS
+- SSL/HTTPS in house
 - Hooks
 - gzip/compressed
 - etags
@@ -90,15 +93,13 @@ to run in daemon mode, or the wawasctl will wait for any CTRL-C to finish
 
 ### Modules:
 - mod_static => check mimes types and errors
-- mod_file => DO !
+- mod_file => DO ! view files in a directory (FTP type)
 - mod_admin => generate the full admin site, hooks, realtile stats/JSON (Comet?) based on Xamboo
 - mod_log => log on vhosts and others
 - mod_php => use sandbox ? capture output, errors control, namespaces, overload classes ?
 - mod_xamboo => integrates SERVER-APP variables (ej. REMOTE_HOST, REMOTE_ADDR, etc)
-
-### New important modules:
-- mod_rediect redirect engine
-- mod_session manage sessions
+- mod_redirect => DO ! rediret engine
+- mod_session => DO ! manage sessions
 
 ### Other interesting modules:
 - Implement PSP (PHP Server Pages)
@@ -106,6 +107,7 @@ to run in daemon mode, or the wawasctl will wait for any CTRL-C to finish
 - netbeans ?
 - Comet module
 - WSDL module
+- Direct Socket
 
 ### Examples
 - a game, twit app, prives polling, realtime graph, edit document, etc
@@ -118,8 +120,11 @@ to run in daemon mode, or the wawasctl will wait for any CTRL-C to finish
 
 ## Version Changes Control
 
-### Build 5 2015/12/??
+### Build 5 2016/01/05
 - tls parameter added in the listener definition
+- Socket protocol added
+- Comet Module added
+- TLS on stream working, SSL supported
 - TLSEngine created and implemented into the client, still working on structures
 
 ### Build 4 2015/12/10
@@ -173,12 +178,32 @@ Do not use it for production sites.
 
 ## Protocols Reference
 
+### HTTP11
+
+### Socket
+
+---
+
 ## Modules manual
+
+### ModuleAdmin
+
+### ModuleLog
+
+### ModulePHP
+
+### ModuleStatic
+
+### ModuleXamboo
+
+---
 
 ## DomCore Manual
 
-[![Manual]](http://www.webability.info/?P=documentacion&wiki=/DomCore)
+[Manual](http://www.webability.info/?P=documentacion&wiki=/DomCore)
+
+---
 
 ## Xamboo Manual
 
-[![Manual]](http://www.webability.info/?P=documentacion&wiki=/Xamboo)
+[Manual](http://www.webability.info/?P=documentacion&wiki=/Xamboo)

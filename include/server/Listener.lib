@@ -6,17 +6,21 @@ namespace server;
 // CLASE PRINCIPAL DEL SERVIDOR
 // ========================================================
 
-class Listener
+class Listener extends \Volatile
 {
   public $name;
   public $ip;
   public $port;
-  public $tls;
   public $maxconnections;
   public $bufferlength;
   public $protocol;
-  
+  public $tls;
+  public $cert_file;
+  public $key_file;
+  public $ca_file;
+  public $tlsengine;
   public $TLSEngine = null;
+  public $tlsstream = false;
   
   public $socket = null;
   
@@ -30,41 +34,88 @@ class Listener
     $this->bufferlength = $localconfig->bufferlength?:$default->bufferlength;
     $this->protocol = $localconfig->protocol?:$default->protocol;
     
+    // setup the TLS (SSL) engine
     if ($this->tls)
     {
-      // setup the TLS (SSL) engine
-      $this->TLSEngine = new TLSEngine($localconfig);
+      $this->cert_file = $localconfig->tls->cert_file;
+      $this->key_file = $localconfig->tls->key_file;
+      $this->ca_file = $localconfig->tls->ca_file;
+      $this->tlsengine = $localconfig->tls->tlsengine;
+      if ($this->tlsengine == 'TLS')
+      {
+        $this->TLSEngine = new TLSEngine($localconfig);
+      }
+      else
+      {
+        $this->tlsstream = true;
+        print "TLS Stream engine ON\n";
+        
+// ******************************
+/* TLS WIll be forked or threaded for now since the socket MUST be blocking on stream_socket_server to work correctly. 
+   It is then incompatible with the whole WAWAS concept to have non blocking sockets.
+   and must have its how IP::Port thread to not interfere with others listeners
+   PROBLEM: the listeners must be glued to a SINGLE certificate like Apache 2.2
+   SOLUTION: Developp TLSEngine to have to ability to make certificate by vhost on TLS1.2 with TLS extentions
+*/
+        
+      }
     }
+      
+      
   }
   
   public function start()
   {
-    // Crear socket TCP
-    if (($this->socket = socket_create(AF_INET, SOCK_STREAM, 0)) < 0)
-      return false; // error
-    
-    // Aseguramos que se pueda reusar el par IP/puerto aún no cerrado por OS
-    socket_set_option($this->socket, SOL_SOCKET, SO_REUSEADDR, 1);
+    if ($this->tlsstream)
+    {
+      // Either it seems the certificate is stuck to the IP:PORT (like Apache 2.2) and is not yet vhost available for TLS 1.3 ????? (only 1 certificate into the context area)
+      // The sockets also have a tiny internal buffer of 8K, so in case of heavy load that could break many things (read somewhere on stack overflow)
+print "STARTING TLS STREAM\n";
+      $context = stream_context_create(['ssl' => ['local_cert' => $this->cert_file, 'local_pk' => $this->key_file, 'cafile' => $this->ca_file, 'verify_peer' => false]]);
+      $this->socket = stream_socket_server('tls://' . $this->ip . ':' . $this->port, $errno, $errstr, STREAM_SERVER_BIND|STREAM_SERVER_LISTEN, $context);
+      // TLS stream must block to be able to decode certificates
+      if (($this->socket) === false)
+        throw new \Error('Error creating socket: '. $errno . ' ' . $errstr);
+      print 'tls://' . $this->ip . ':' . $this->port . "\n";
+      print $errno . ' ' . $errstr . "\n";
+print "UP OK\n";
+      stream_set_blocking($this->socket, true);
+    }
+    else
+    {
+      // Crear socket TCP
+      if (($this->socket = socket_create(AF_INET, SOCK_STREAM, 0)) < 0)
+        throw new \Error('Error creating socket: '.$this->ip.':'.$this->port);
+      
+      // Aseguramos que se pueda reusar el par IP/puerto aún no cerrado por OS
+      socket_set_option($this->socket, SOL_SOCKET, SO_REUSEADDR, 1);
 
-    // Ligar el socket
-    if (!socket_bind($this->socket, $this->ip, $this->port))
-      return false; // error
+      // Ligar el socket
+      if (!socket_bind($this->socket, $this->ip, $this->port))
+        throw new \Error('Error binding socket: '.$this->ip.':'.$this->port);
 
-    // Escuchamos el socket
-    if (socket_listen($this->socket) < 0)
-      return false; // error
+      // Escuchamos el socket
+      if (socket_listen($this->socket) < 0)
+        throw new \Error('Error listening socket: '.$this->ip.':'.$this->port);
 
-    // Nuestro socket no debe bloquear
-    socket_set_nonblock($this->socket);
-    
+      // Nuestro socket no debe bloquear
+      socket_set_nonblock($this->socket);
+    }
     return true;
   }
   
   public function stop()
   {
-    // Cierra el socket principal
-    socket_shutdown($this->socket);
-    socket_close($this->socket);
+    if ($this->tlsstream)
+    {
+      fclose($this->socket);
+    }
+    else
+    {
+      // Cierra el socket principal
+      socket_shutdown($this->socket);
+      socket_close($this->socket);
+    }
     $this->socket = null;
   }
 
