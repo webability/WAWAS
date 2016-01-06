@@ -76,6 +76,8 @@ to run in daemon mode, or the wawasctl will wait for any CTRL-C to finish
 ### Server:
 - Hooks on modules (working on them)
 - implement maxs on #threads, #clients, #hits, sizes, headers etc
+- heap corrupted when an error occurs (no vhost, 501, etc)
+- CTRL-C hang the processes instead of quitting
 
 ### Protocol HTTP2:
 Analize, read, implement ?
@@ -126,6 +128,8 @@ Analize, read, implement ?
 - Comet Module added
 - TLS on stream working, SSL supported
 - TLSEngine created and implemented into the client, still working on structures
+- ThreadedServer created for blocking streams on extra thread
+- Listener is now volatile for ThreadedServer
 
 ### Build 4 2015/12/10
 - wawasctl included to start as a daemon
