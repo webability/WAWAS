@@ -186,12 +186,12 @@ EOF;
 
     if ($this->shutdown)
     {
-      // SI ya habiamos recibido una señal, entonces formazmos (colgado?)
+      // SI ya habiamos recibido una señal, entonces forzamos (colgado?)
       print "Forzamos la parada de la aplicación.\n";
       exit(0);
     }
     $this->shutdown = true;
-    // Decir al servidor que queremos un shutdown limpio (termina de servir los clientes, pero no acepta nuevos)
+    // Decir al servidor que queremos un shutdown limpio (corta los clientes, no acepta nuevos)
     $this->server->shutdown();
   }
 

@@ -215,6 +215,10 @@ final class ProtocolHTTP11 extends \protocols\Protocol
         $context->request->hasbody = true;
       }
 
+      // UPGRADES
+      // WEBSOCKET
+      // CONTINUOUS INPUT/OUTPUT + HEADERS
+      
       if ($context->request->hasheaders && $context->request->hasbody)
       {
         $mb = microtime(true);

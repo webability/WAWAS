@@ -88,8 +88,6 @@ class Client extends \Thread
     // el run se vuelve el loop prinipal del collectable
     // Salimos cuando se desconecta el cliente (o nos forzamos a desconectar)
     // El ciclo es "infinito" hasta recibir una señal para matar el proceso
-      print "accepted " . @stream_socket_get_name( $this->socket, true) . " ";
-      print "OK OK\n";
     while ($mainloop)
     {
       if ($this->listener->tlsstream)
@@ -140,6 +138,9 @@ Warning: stream_socket_accept(): accept failed: Connection timed out in /home/si
           $context->state = 1;
           foreach($this->modules as $module) $module->receivedata($context, $input);
           $data = $this->protocol->process($context, $input);
+          
+          // UPGRADE PROTOCOL ej. WEBSOCKET, SWITCH TO WSPROTOCOL on UPGRADE PROTOCOL
+          
           if ($data)
           {
             foreach($this->modules as $module) $module->senddata($context, $data);
@@ -216,6 +217,8 @@ Warning: stream_socket_accept(): accept failed: Connection timed out in /home/si
           // Only when the content is clear, pass it through to protocol
           $datareadable = true;
           $data = null;
+
+          // UPGRADE PROTOCOL ej. WEBSOCKET, SWITCH TO WSPROTOCOL on UPGRADE PROTOCOL
 
           if ($this->listener->tls)
           {

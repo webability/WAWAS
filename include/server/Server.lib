@@ -8,7 +8,7 @@ namespace server;
 
 class Server
 {
-  const VERSION = '1.0.5';
+  const VERSION = '1.0.7';
   
   // main system configuration
   private $config;
@@ -29,7 +29,7 @@ class Server
   {
     $this->config = $config;
     
-  // Step 3.1, Parse the full config file with protocols and modules already loaded
+    // Step 3.1, Parse the full config file with protocols and modules already loaded
     // since every protocol and module may have specific config entries that have to be parsed too
 
     // 1. We build the modules (system wide)
@@ -119,18 +119,10 @@ class Server
     $maincounter = 0;
     
     /* init hooks: */
-    
-//*****************************************    
-// BUILD A BETTER HOOK DISPACHER FOR MODULES TO NOT CALL ALL MODULES ALL FUNCTIONS
-//*******************************************    
-//*******************************************    
-//*******************************************    
     foreach($this->modules as $module) $module->init($this->modules, $this->protocols, $this->listeners);
     
-    // Variable condicional para el ciclo principal infinito
-    $mainloop = true;
     // El ciclo es "infinito" hasta recibir una señal para matar el proceso
-    while ($mainloop)
+    while (true)
     {
       // permitimos a las señales pasar por el sistema e interpretarlas.
       pcntl_signal_dispatch();
@@ -159,13 +151,18 @@ class Server
         }
 */
 
-        $numsockets = socket_select($readers, $_wr, $_ex, 1, 0);
+        $numsockets = @socket_select($readers, $_wr, $_ex, 1, 0);
         if ($numsockets === false)
         { // es un error grave. Por el momento no captamos este error, solo cerramos todo y notificamos
-          print 'Error grave general de la aplicación'."\n";
+          // CTRL C pasa por aqui
           $err = socket_last_error();
-          print 'Error on socket: '.$err. ' ' . socket_strerror($err) . "\n";
-          break;
+          if ($err != 4)  // 4 = CTRL C (interruption system call), be silent pls !
+          {
+            print 'Error grave general de la aplicación'."\n";
+            print 'Error on socket: '.$err. ' ' . socket_strerror($err) . "\n";
+            // Throw error
+            break;
+          }
         }
 
         if ($numsockets > 0)
@@ -188,13 +185,6 @@ class Server
           }
         }
         unset($readers);
-      }
-      else
-      {  // modo shutdown. 
-         // Debemos de cerrar los listeners de una vez para que los que se conectan sepan que ya no los queremos
-        foreach($this->clients as $k => $client)
-          $client->shutdown();
-        print "SHUTDOWN EN CURSO";
       }
 
       // limpia los threads del pooler
@@ -230,13 +220,10 @@ class Server
       // shutdown limpio, terminamos de servir los clientes
       if ($this->shutdown && sizeof($this->clients) == 0)
       {
-        $mainloop = false;
+        break;
       }
-    } 
-    
-    // Cerramos todo
-    $this->stopListeners();
-    
+    }
+
     /* shutdown hooks: */
     foreach($this->modules as $module) $module->shutdown();
   }
@@ -244,6 +231,13 @@ class Server
   public function shutdown()
   {
     $this->shutdown = true;
+    foreach($this->serverthreads as $k => $server)
+      $server->shutdown();
+    foreach($this->clients as $k => $client)
+      $client->shutdown();
+    print "SHUTDOWN EN CURSO...\n";
+    // Cerramos todo
+    $this->stopListeners();
   }
 
 }

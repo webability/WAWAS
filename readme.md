@@ -1,4 +1,4 @@
-# WAWAS - The WebAbility(r) PHP Web and Application Server v1.0.5
+# WAWAS - The WebAbility(r) PHP Web and Application Server v1.0.7
 
 [![Average time to resolve an issue](http://isitmaintained.com/badge/resolution/webability/WAWAS.svg)](http://isitmaintained.com/project/webability/WAWAS "Average time to resolve an issue")
 [![Percentage of issues still open](http://isitmaintained.com/badge/open/webability/WAWAS.svg)](http://isitmaintained.com/project/webability/WAWAS "Percentage of issues still open")
@@ -77,7 +77,6 @@ to run in daemon mode, or the wawasctl will wait for any CTRL-C to finish
 - Hooks on modules (working on them)
 - implement maxs on #threads, #clients, #hits, sizes, headers etc
 - heap corrupted when an error occurs (no vhost, 501, etc)
-- CTRL-C hang the processes instead of quitting
 
 ### Protocol HTTP2:
 Analize, read, implement ?
@@ -121,6 +120,13 @@ Analize, read, implement ?
 ---
 
 ## Version Changes Control
+
+### Build 7 2016/??
+- Implementation of phpunit tests for travis
+
+### Build 6 2016/01/05
+- CTRL-C Gracefully ends the application, it does not hang anymore
+- shutdown function has been removed
 
 ### Build 5 2016/01/05
 - tls parameter added in the listener definition

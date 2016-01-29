@@ -3,9 +3,11 @@ WAWAS - Administration
 </div>
 
 <div style="position: fixed; top: 50px; left: 0; bottom: 0; width: 200px; background-color: #ccf;">
-Home<br />
-Modules<br />
-Threads<br />
+<div onclick="">Dashboard</div>
+<div onclick="">Listeners</div>
+<div onclick="">Protocols</div>
+<div onclick="">Modules</div>
+<div onclick="">Threads</div>
 </div>
 
 <div style="margin-top: 50px; margin-left: 200px; padding: 10px;">

@@ -29,12 +29,14 @@ function autoload($classname)
 
 spl_autoload_register('autoload');
 
+/*
 function crash()
 {
   echo 'Crash ?', PHP_EOL;
 }
 
 register_shutdown_function('crash');
+*/
 
 // Duerme unos microsegundos usando un monitor MTS
 function _sleep($microseconds)
